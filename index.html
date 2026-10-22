@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MS HANA - نظام إدارة المصنع</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- شاشة التحميل -->
+<div id="loader" class="loader-screen">
+  <div class="loader-logo">🌸</div>
+  <div class="loader-spinner"></div>
+  <div class="loader-text">MS HANA</div>
+  <div class="loader-subtext">مصنع مس هنا</div>
+  <div class="loader-credit">
+    <span>إدارة: <b>محمد كمال</b></span>
+  </div>
+  <div class="loader-progress">
+    <div class="loader-progress-bar" id="loaderProgressBar"></div>
+  </div>
+</div>
+
+<!-- شاشة تسجيل الدخول -->
+<div id="login">
+  <div class="login-bg-shapes">
+    <div class="shape shape-1"></div>
+    <div class="shape shape-2"></div>
+    <div class="shape shape-3"></div>
+  </div>
+  <div class="login-card">
+    <img src="logo.png" alt="MS HANA Logo" class="login-logo" onerror="this.src='https://via.placeholder.com/100/6366f1/ffffff?text=MS'">
+    <h1>MS HANA</h1>
+    <p>مصنع مس هنا — إدارة محمد كمال</p>
+    <div class="login-field">
+      <span class="field-icon">👤</span>
+      <input type="text" id="loginUsername" placeholder="اسم المستخدم" autocomplete="username">
+    </div>
+    <div class="login-field">
+      <span class="field-icon">🔒</span>
+      <input type="password" id="pwInput" placeholder="كلمة السر" autocomplete="current-password" onkeypress="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="login-btn" onclick="doLogin()">
+      <span class="btn-text">دخول النظام</span>
+      <span class="btn-icon">→</span>
+    </button>
+    <div class="login-err" id="loginErr">❌ بيانات الدخول غير صحيحة</div>
+    <div class="dev-credit">تطوير: Omar Abdo</div>
+  </div>
+</div>
+
+<!-- التطبيق -->
+<div id="app">
+<button class="mobile-toggle" onclick="toggleSidebar()">☰</button>
+
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <img src="logo.png" alt="Logo" class="sidebar-logo" onerror="this.src='https://via.placeholder.com/40/6366f1/ffffff?text=M'">
+    <div>
+      <h2>MS HANA</h2>
+      <p>مصنع مس هنا</p>
+    </div>
+  </div>
+  <div class="nav-section">الرئيسية</div>
+  <div class="nav-item active" onclick="go('dashboard',event)"><span class="icon">📊</span>لوحة التحكم</div>
+  
+  <div class="nav-section">الإدارة</div>
+  <div class="nav-item" onclick="go('team',event)"><span class="icon">👥</span>الفريق</div>
+  <div class="nav-item" onclick="go('products',event)"><span class="icon">📦</span>الأصناف</div>
+  
+  <div class="nav-section">العمل</div>
+  <div class="nav-item" onclick="go('cuts',event)"><span class="icon">✂️</span>القصّات</div>
+  <div class="nav-item" onclick="go('orders',event)"><span class="icon">📋</span>الشغل المطلوب</div>
+  <div class="nav-item" onclick="go('work-machine',event)"><span class="icon">⚙️</span>إنتاج (صنايعية - مكن)</div>
+  <div class="nav-item" onclick="go('work-iron',event)"><span class="icon">🔥</span>إنتاج (مكوة)</div>
+  
+  <div class="nav-section">الحضور (أرضية/أوفر)</div>
+  <div class="nav-item" onclick="go('attendance',event)"><span class="icon">📅</span>الحضور والغياب</div>
+  <div class="nav-item" onclick="go('weeklyPay',event)"><span class="icon">💵</span>القبض الأسبوعي</div>
+  
+  <div class="nav-section">المستوردين</div>
+  <div class="nav-item" onclick="go('suppliers',event)"><span class="icon">🏭</span>المستوردين</div>
+  <div class="nav-item" onclick="go('supPay',event)"><span class="icon">💳</span>مدفوعات المستوردين</div>
+  
+  <div class="nav-section">المالية</div>
+  <div class="nav-item" onclick="go('advance',event)"><span class="icon">💸</span>المصاريف والخصومات</div>
+  <div class="nav-item" onclick="go('pay',event)"><span class="icon">💰</span>صرف المستحقات</div>
+  
+  <div class="nav-section">التقارير</div>
+  <div class="nav-item" onclick="go('inventory',event)"><span class="icon">📑</span>الجرد الشامل</div>
+  <div class="nav-item" onclick="go('reports',event)"><span class="icon">📈</span>تقارير العمال</div>
+  
+  <div class="nav-section">النظام</div>
+  <div class="nav-item" onclick="go('backup',event)"><span class="icon">💾</span>النسخ الاحتياطي</div>
+  
+  <div class="nav-section admin-only">إدارة النظام</div>
+  <div class="nav-item admin-only" onclick="go('users',event)"><span class="icon">🔑</span>المستخدمين والصلاحيات</div>
+  <div class="nav-item admin-only" onclick="go('devices',event)"><span class="icon">💻</span>الأجهزة المسجلة</div>
+</aside>
+
+<main class="main">
+  
+  <!-- شريط المستخدم العلوي -->
+  <div class="user-bar" id="userBar">
+    <div class="user-info" onclick="go('settings',event)">
+      <div class="user-avatar" id="userAvatar">A</div>
+      <div class="user-details">
+        <div class="user-name" id="userName">Admin</div>
+        <div class="user-role" id="userRole">👑 مدير</div>
+      </div>
+    </div>
+    <div class="user-actions">
+      <button class="action-btn" onclick="toggleTheme()" title="الوضع الليلي">🌙</button>
+      <button class="action-btn" onclick="go('settings',event)" title="الإعدادات">⚙️</button>
+      <button class="action-btn logout-btn" onclick="logout()" title="تسجيل الخروج">🚪 <span>خروج</span></button>
+    </div>
+  </div>
+
+<!-- لوحة التحكم -->
+<div class="page active" id="page-dashboard">
+  <div class="topbar"><h1>📊 لوحة التحكم</h1>
+    <div class="topbar-actions">
+      <button class="icon-btn" onclick="toggleTheme()">🌙</button>
+      <button class="icon-btn" onclick="window.print()">🖨️</button>
+      <button class="icon-btn" onclick="logout()">🚪</button>
+    </div>
+  </div>
+  <div class="kpis" id="dashKpis"></div>
+  <div class="card"><div class="card-header"><div class="card-title">⏰ تنبيهات المواعيد</div></div><div id="dashAlerts"></div></div>
+  <div class="card"><div class="card-header"><div class="card-title">📈 أداء الصنايعية (عدد القطع)</div></div><div class="chart-box"><canvas id="dashChart"></canvas></div></div>
+</div>
+
+<!-- الجرد الشامل -->
+<div class="page" id="page-inventory">
+  <div class="topbar"><h1>📑 الجرد الشامل</h1>
+    <div class="topbar-actions">
+      <button class="btn sm info" onclick="downloadPDF('inventoryReport', 'الجرد_الشامل')">📄 تحميل PDF</button>
+    </div>
+  </div>
+  <div id="inventoryReport">
+    <div class="report-header">
+      <h2>🌸 MS HANA — جرد شامل</h2>
+      <p>تاريخ التقرير: <span id="invDate"></span></p>
+    </div>
+    <div class="kpis" id="invKpis"></div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">👥 إحصائيات الفريق</div></div>
+      <div class="table-wrap"><table>
+        <tr><th>#</th><th>الاسم</th><th>الدور</th><th>التفاصيل</th><th>الصافي</th></tr>
+        <tbody id="invTeamBody"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">📋 ملخص الشغل المطلوب والمستوردين</div></div>
+      <div class="table-wrap"><table>
+        <tr><th>المستورد</th><th>إجمالي الطلبات</th><th>تم تسليمه</th><th>المدفوع</th><th>متبقي (مديونية)</th></tr>
+        <tbody id="invSuppliersBody"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">✂️ ملخص القصّات</div></div>
+      <div class="table-wrap"><table>
+        <tr><th>اسم القصّة</th><th>الصنف</th><th>العدد الإجمالي</th><th>تم توزيعه</th><th>الباقي</th></tr>
+        <tbody id="invCutsBody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- الفريق -->
+<div class="page" id="page-team">
+  <div class="topbar"><h1>👥 الفريق</h1></div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">➕ إضافة عضو</div></div>
+    <div class="form-row">
+      <div><label>الاسم</label><input id="teamName" placeholder="اسم العضو"></div>
+      <div><label>الدور</label><select id="teamRole">
+        <option value="iron">🔥 مكوة</option><option value="machine">⚙️ مكن</option>
+        <option value="floor">🏠 أرضية</option><option value="overlock">🧵 أوفر</option>
+      </select></div>
+    </div>
+    <div id="dailyRateWrap" style="display:none">
+      <label>💵 الأجر الأسبوعي الثابت (للأرضية والأوفر)</label>
+      <input id="teamDailyRate" type="number" step="0.01" placeholder="مثلاً 1200" value="0">
+      <small>الأسبوع من السبت إلى الجمعة — الغياب يُخصم تلقائياً والجمعة بكامل الأجر</small>
+    </div>
+    <button class="btn success full" onclick="addTeam()">💾 إضافة</button>
+  </div>
+  <div class="card"><div id="teamBody"></div></div>
+</div>
+
+<!-- الأصناف -->
+<div class="page" id="page-products">
+  <div class="topbar"><h1>📦 الأصناف</h1></div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">➕ إضافة صنف</div></div>
+    <div class="form-row-3">
+      <div><label>الاسم</label><input id="prodName" placeholder="عباية مطرزة"></div>
+      <div><label>🔥 مكوة</label><input id="prodIron" type="number" step="0.01" value="0"></div>
+      <div><label>⚙️ مكن</label><input id="prodMachine" type="number" step="0.01" value="0"></div>
+    </div>
+    <button class="btn success full" onclick="addProduct()">💾 إضافة</button>
+  </div>
+  <div class="card"><div id="prodBody"></div></div>
+</div>
+
+<!-- القصّات -->
+<div class="page" id="page-cuts">
+  <div class="topbar"><h1>✂️ القصّات</h1>
+    <div class="topbar-actions"><button class="icon-btn" onclick="exportCuts()">📥</button></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">➕ تسجيل قصّة جديدة</div></div>
+    <div class="form-row">
+      <div><label>اسم/رقم القصّة</label><input id="cutName" placeholder="قصّة أكتوبر 1"></div>
+      <div><label>الصنف</label><select id="cutProduct"><option value="">— اختار —</option></select></div>
+    </div>
+    <div class="form-row-3">
+      <div><label>عدد القطع</label><input id="cutQty" type="number" min="1"></div>
+      <div><label>المستورد</label><select id="cutSupplier"><option value="">— بدون —</option></select></div>
+      <div><label>تاريخ القص</label><input id="cutDate" type="date"></div>
+    </div>
+    <div class="color-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <label style="margin:0;font-size:13px;font-weight:700;color:var(--text)">🎨 الألوان والكميات</label>
+        <button class="btn info sm" onclick="addColorRow()">➕ لون</button>
+      </div>
+      <div id="cutColorsList"></div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:8px">إجمالي الألوان: <b id="cutColorsTotal">0</b> قطعة</div>
+    </div>
+    <label style="margin-top:14px">ملاحظات</label>
+    <input id="cutNote" placeholder="اختياري">
+    <button class="btn success full" style="margin-top:10px" onclick="addCut()">💾 تسجيل القصّة</button>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">📋 القصّات المسجلة</div>
+      <select id="cutFilter" onchange="renderCuts()" style="width:auto;margin:0">
+        <option value="">الكل</option><option value="open">🔓 مفتوحة</option>
+        <option value="done">✅ مكتملة</option><option value="closed">🔒 مغلقة</option>
+      </select>
+    </div>
+    <div class="search-box"><input id="cutSearch" placeholder="بحث..." oninput="renderCuts()"></div>
+    <div id="cutsBody"></div>
+  </div>
+</div>
+
+<!-- الشغل المطلوب -->
+<div class="page" id="page-orders">
+  <div class="topbar"><h1>📋 الشغل المطلوب</h1>
+    <div class="topbar-actions"><button class="icon-btn" onclick="exportOrders()">📥</button></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">➕ طلب جديد</div></div>
+    <div class="form-row">
+      <div><label>المستورد</label><select id="ordSupplier"><option value="">— اختار —</option></select></div>
+      <div><label>الصنف</label><select id="ordProduct"><option value="">— اختار —</option></select></div>
+    </div>
+    <div class="form-row-3">
+      <div><label>الكمية</label><input id="ordQty" type="number" min="1"></div>
+      <div><label>السعر</label><input id="ordPrice" type="number" step="0.01"></div>
+      <div><label>التسليم</label><input id="ordDate" type="date"></div>
+    </div>
+    <label>ملاحظات</label>
+    <input id="ordNote" placeholder="اختياري">
+    <button class="btn success full" onclick="addOrder()">💾 حفظ</button>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">📋 الطلبات</div>
+      <select id="ordFilter" onchange="renderOrders()" style="width:auto;margin:0">
+        <option value="">الكل</option><option value="pending">⏳ قيد التنفيذ</option>
+        <option value="late">⚠️ متأخر</option><option value="done">✅ مسلَّم</option>
+        <option value="cancelled">❌ ملغي</option>
+      </select>
+    </div>
+    <div class="search-box"><input id="ordSearch" placeholder="بحث..." oninput="renderOrders()"></div>
+    <div id="ordersBody"></div>
+  </div>
+</div>
+
+<!-- الإنتاج (صنايعية - مكن) -->
+<div class="page" id="page-work-machine">
+  <div class="topbar"><h1>⚙️ إنتاج الصنايعية (مكن)</h1></div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">➕ تسجيل إنتاج مكن</div></div>
+    <div class="form-row">
+      <div><label>الصنايعي</label><select id="workWorkerMachine" onchange="filterWorkProductsMachine()"><option value="">— اختار —</option></select></div>
+      <div><label>الصنف</label><select id="workProductMachine"><option value="">— اختار —</option></select></div>
+    </div>
+    <div class="form-row">
+      <div><label>العدد</label><input id="workQtyMachine" type="number" min="1"></div>
+      <div><label>الطلب</label><select id="workOrderMachine"><option value="">— بدون —</option></select></div>
+    </div>
+    <div class="form-row">
+      <div><label>القصّة</label><select id="workCutMachine" onchange="updateCutRemainingMachine()"><option value="">— بدون —</option></select></div>
+      <div><label>اللون</label><select id="workColorMachine"><option value="">— بدون —</option></select></div>
+    </div>
+    <div id="cutRemainingInfoMachine" style="font-size:12px;color:var(--text-muted);margin-bottom:10px;display:none"></div>
+    <button class="btn success full" onclick="addWorkMachine()">💾 تسجيل إنتاج المكن</button>
+  </div>
+  <div class="card"><div id="workLogsMachine"></div></div>
+</div>
+
+<!-- الإنتاج (مكوة) -->
+<div class="page" id="page-work-iron">
+  <div class="topbar"><h1>🔥 إنتاج المكوة</h1></div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">➕ تسجيل إنتاج مكوة</div></div>
+    <div class="form-row">
+      <div><label>المكوة</label><select id="workWorkerIron" onchange="filterWorkProductsIron()"><option value="">— اختار —</option></select></div>
+      <div><label>الصنف</label><select id="workProductIron"><option value="">— اختار —</option></select></div>
+    </div>
+    <div class="form-row">
+      <div><label>العدد</label><input id="workQtyIron" type="number" min="1"></div>
+      <div><label>الطلب</label><select id="workOrderIron"><option value="">— بدون —</option></select></div>
+    </div>
+    <div class="form-row">
+      <div><label>القصّة</label><select id="workCutIron" onchange="updateCutRemainingIron()"><option value="">— بدون —</option></select></div>
+      <div><label>اللون</label><select id="workColorIron"><option value="">— بدون —</option></select></div>
+    </div>
+    <div id="cutRemainingInfoIron" style="font-size:12px;color:var(--text-muted);margin-bottom:10px;display:none"></div>
+    <button class="btn success full" onclick="addWorkIron()">💾 تسجيل إنتاج المكوة</button>
+  </div>
+  <div class="card"><div id="workLogsIron"></div></div>
+</div>
+
+<!-- الحضور -->
+<div class="page" id="page-attendance">
+  <div class="topbar"><h1>📅 الحضور والغياب — أرضية وأوفر</h1></div>
+  <div class="card">
+    <div class="week-nav">
+      <button class="btn sm" onclick="moveWeek(-1)">← السابق</button>
+      <div class="week-label" id="attWeekLabel">—</div>
+      <button class="btn sm" onclick="moveWeek(1)">التالي →</button>
+    </div>
+    <label>اختار العامل (أرضية/أوفر)</label>
+    <select id="attWorker" onchange="renderAttendance()"><option value="">— اختار —</option></select>
+    <div id="attGrid"></div>
+    <div id="attSummary" style="margin-top:16px"></div>
+  </div>
+</div>
+
+<!-- القبض الأسبوعي -->
+<div class="page" id="page-weeklyPay">
+  <div class="topbar"><h1>💵 القبض الأسبوعي — أرضية وأوفر</h1></div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">➕ تسجيل قبض أسبوعي</div></div>
+    <div class="form-row">
+      <div><label>العامل</label><select id="wpWorker"><option value="">— اختار —</option></select></div>
+      <div><label>الأسبوع (اختار أي يوم)</label><input id="wpDate" type="date"></div>
+    </div>
+    <div class="form-row">
+      <div><label>المبلغ المقبوض</label><input id="wpAmount" type="number" step="0.01"></div>
+      <div><label>ملاحظة</label><input id="wpNote" placeholder="اختياري"></div>
+    </div>
+    <button class="btn success full" onclick="addWeeklyPay()">💾 تسجيل</button>
+  </div>
+  <div class="card"><div id="wpLogs"></div></div>
+</div>
+
+<!-- المستوردين -->
+<div class="page" id="page-suppliers">
+  <div class="topbar"><h1>🏭 المستوردين</h1></div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">➕ إضافة مستورد</div></div>
+    <div class="form-row">
+      <div><label>الاسم</label><input id="supName" placeholder="اسم المستورد"></div>
+      <div><label>التليفون</label><input id="supPhone" placeholder="01xxxxxxxxx"></div>
+    </div>
+    <label>ملاحظات</label>
+    <input id="supNote" placeholder="اختياري">
+    <button class="btn success full" onclick="addSupplier()">💾 إضافة</button>
+  </div>
+  <div class="card"><div id="suppliersBody"></div></div>
+</div>
+
+<!-- مدفوعات المستوردين -->
+<div class="page" id="page-supPay">
+  <div class="topbar"><h1>💳 مدفوعات المستوردين</h1></div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">➕ تسجيل دفعة</div></div>
+    <div class="form-row">
+      <div><label>المستورد</label><select id="supPayWorker"><option value="">— اختار —</option></select></div>
+      <div><label>المبلغ</label><input id="supPayAmount" type="number" step="0.01"></div>
+    </div>
+    <label>ملاحظة</label>
+    <input id="supPayNote" placeholder="اختياري">
+    <button class="btn success full" onclick="addSupplierPayment()">💾 تسجيل</button>
+  </div>
+  <div class="card"><div id="supPayLogs"></div></div>
+</div>
+
+<!-- المصاريف والخصومات -->
+<div class="page" id="page-advance">
+  <div class="topbar"><h1>💸 المصاريف والخصومات</h1></div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">➕ تسجيل مصروف / خصم</div></div>
+    <div class="form-row">
+      <div><label>النوع</label>
+        <select id="expType" onchange="updateExpTypeUI()">
+          <option value="advance">💸 سلفة (مصروف للعامل)</option>
+          <option value="refund">💵 استرداد (خصم من العامل)</option>
+        </select>
+      </div>
+      <div><label>العضو</label><select id="advWorker"><option value="">— اختار —</option></select></div>
+    </div>
+    <div class="form-row">
+      <div><label>المبلغ</label><input id="advAmount" type="number" step="0.01"></div>
+      <div><label>ملاحظة</label><input id="advNote" placeholder="اختياري"></div>
+    </div>
+    <button class="btn success full" onclick="addExpenseOrRefund()">💾 تسجيل</button>
+  </div>
+  <div class="card"><div id="advLogs"></div></div>
+</div>
+
+<!-- صرف المستحقات -->
+<div class="page" id="page-pay">
+  <div class="topbar"><h1>💰 صرف المستحقات</h1></div>
+  <div class="card">
+    <div class="form-row">
+      <div><label>العضو</label><select id="payWorker"><option value="">— اختار —</option></select></div>
+      <div><label>المبلغ</label><input id="payAmount" type="number" step="0.01"></div>
+    </div>
+    <label>ملاحظة</label>
+    <input id="payNote" placeholder="اختياري">
+    <button class="btn success full" onclick="addPayment()">💾 تسجيل</button>
+  </div>
+  <div class="card"><div id="payLogs"></div></div>
+</div>
+
+<!-- تقارير العمال -->
+<div class="page" id="page-reports">
+  <div class="topbar"><h1>📈 تقارير العمال</h1>
+    <div class="topbar-actions">
+      <button class="btn sm info" onclick="downloadPDF('reportPrintArea', 'تقرير_عامل')">📄 تحميل PDF</button>
+      <button class="btn sm success" onclick="shareReport()">📤 مشاركة</button>
+    </div>
+  </div>
+  <div class="card">
+    <label>اختار العامل</label>
+    <select id="repWorker" onchange="renderWorkerReport()"><option value="">— اختار —</option></select>
+    <div class="form-row">
+      <div><label>من تاريخ</label><input type="date" id="repFrom" onchange="renderWorkerReport()"></div>
+      <div><label>إلى تاريخ</label><input type="date" id="repTo" onchange="renderWorkerReport()"></div>
+    </div>
+    <button class="btn-ghost btn sm" onclick="document.getElementById('repFrom').value='';document.getElementById('repTo').value='';renderWorkerReport()">مسح التواريخ</button>
+  </div>
+  <div id="reportPrintArea">
+    <div id="reportBody"></div>
+  </div>
+</div>
+
+<!-- النسخ الاحتياطي -->
+<div class="page" id="page-backup">
+  <div class="topbar"><h1>💾 النسخ الاحتياطي</h1></div>
+  <div class="card">
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px">نزّل نسخة كاملة من البيانات، واسترجعها في أي وقت أو على أي جهاز.</p>
+    <button class="btn success full" onclick="backupData()">📥 تحميل نسخة احتياطية</button>
+    <br><br>
+    <label>استرجاع من ملف</label>
+    <input type="file" id="restoreFile" accept=".json" onchange="restoreData(event)">
+  </div>
+  <div class="card">
+    <div class="card-title" style="margin-bottom:10px;color:var(--danger)">⚠️ منطقة الخطر</div>
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px">حذف كل البيانات نهائياً. لا يمكن التراجع.</p>
+    <button class="btn danger full" onclick="wipeAll()">🗑️ حذف كل البيانات</button>
+  </div>
+</div>
+
+<!-- المستخدمين والصلاحيات -->
+<div class="page" id="page-users">
+  <div class="topbar"><h1>🔑 المستخدمين والصلاحيات</h1></div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">➕ إضافة مستخدم</div></div>
+    <div class="form-row">
+      <div><label>اسم المستخدم (بالإنجليزي)</label><input id="newUsername" placeholder="username"></div>
+      <div><label>الاسم الكامل</label><input id="newFullName" placeholder="الاسم"></div>
+    </div>
+    <div class="form-row">
+      <div><label>كلمة السر</label><input id="newPassword" type="password" placeholder="كلمة السر"></div>
+      <div><label>نوع الحساب</label><select id="newRole" onchange="document.getElementById('permWrap').style.display=this.value==='admin'?'none':'block'">
+        <option value="user">👤 مستخدم عادي</option>
+        <option value="admin">👑 مدير (كل الصلاحيات)</option>
+      </select></div>
+    </div>
+    <div id="permWrap">
+      <label>الصلاحيات المتاحة:</label>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px" id="permCheckboxes"></div>
+    </div>
+    <button class="btn success full" style="margin-top:14px" onclick="addNewUser()">💾 إضافة مستخدم</button>
+  </div>
+  <div class="card"><div id="usersList"></div></div>
+</div>
+
+<!-- الأجهزة المسجلة -->
+<div class="page" id="page-devices">
+  <div class="topbar"><h1>💻 الأجهزة المسجلة</h1></div>
+  <div class="card"><div id="devicesList"></div></div>
+</div>
+
+<!-- إعدادات الحساب -->
+<div class="page" id="page-settings">
+  <div class="topbar"><h1>⚙️ إعدادات الحساب</h1></div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">🔐 تغيير كلمة السر</div></div>
+    <label>كلمة السر الحالية</label>
+    <input id="curPw" type="password">
+    <label>كلمة السر الجديدة</label>
+    <input id="newPw" type="password">
+    <label>تأكيد كلمة السر الجديدة</label>
+    <input id="newPwConfirm" type="password">
+    <button class="btn success full" onclick="changeMyPassword()">💾 حفظ</button>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">ℹ️ معلومات الحساب</div></div>
+    <div id="myAccountInfo"></div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- مودال التأكيد -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3 id="modalTitle"></h3>
+    <p id="modalBody"></p>
+    <div class="modal-actions">
+      <button class="btn danger" onclick="modalConfirm()">تأكيد</button>
+      <button class="btn-ghost btn" onclick="modalClose()">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- مودال التعديل -->
+<div class="modal-bg" id="editModalBg">
+  <div class="modal">
+    <h3 id="editModalTitle">✏️ تعديل</h3>
+    <div id="editModalBody" style="max-height:60vh;overflow-y:auto;padding:4px 0"></div>
+    <div class="modal-actions" style="margin-top:20px">
+      <button class="btn success" onclick="saveEdit()">💾 حفظ التعديل</button>
+      <button class="btn-ghost btn" onclick="closeEditModal()">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<script src="main.js"></script>
+</body>
+</html>
