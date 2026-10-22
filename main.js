@@ -1,44 +1,13 @@
 const KEY = "mashana_erp_v6_2";
 const USERS_KEY = "mshana_users";
-const DEVICES_KEY = "mshana_devices";
 const CURRENT_USER_KEY = "mshana_current";
 const THEME_KEY = "mshana_theme";
 
 const ROLES = { iron:"🔥 مكوة", machine:"⚙️ مكن", floor:"🏠 أرضية", overlock:"🧵 أوفر" };
 const DAY_NAMES = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
 
-const SECTIONS = [
-  { key: "dashboard", label: "لوحة التحكم" },
-  { key: "team", label: "الفريق" },
-  { key: "products", label: "الأصناف" },
-  { key: "cuts", label: "القصّات" },
-  { key: "orders", label: "الشغل المطلوب" },
-  { key: "work_machine", label: "إنتاج (مكن)" },
-  { key: "work_iron", label: "إنتاج (مكوة)" },
-  { key: "attendance", label: "الحضور والغياب" },
-  { key: "weeklyPay", label: "القبض الأسبوعي" },
-  { key: "suppliers", label: "المستوردين" },
-  { key: "supPay", label: "مدفوعات المستوردين" },
-  { key: "advance", label: "المصاريف والخصومات" },
-  { key: "pay", label: "صرف المستحقات" },
-  { key: "inventory", label: "الجرد الشامل" },
-  { key: "reports", label: "تقارير العمال" },
-  { key: "backup", label: "النسخ الاحتياطي" }
-];
-
-let data = {
-  users:[], products:[], orders:[], suppliers:[], cuts:[],
-  pieceWork:[], advances:[], refunds:[], payments:[], supPayments:[],
-  attendance:[], weeklyPay:[],
-  nextId:{user:1,prod:1,ord:1,sup:1,cut:1,work:1,adv:1,ref:1,pay:1,spay:1,wp:1}
-};
-let dashChart = null;
-let confirmCb = null;
-let currentWeekStart = null;
-let editContext = { type: null, id: null };
-
 // ============================================================
-// ============ إدارة التاريخ (توقيت القاهرة - مصر) ============
+// ============ إدارة التاريخ (توقيت القاهرة) ============
 // ============================================================
 function dateToLocalStr(d){
   if (!d) return "";
@@ -54,27 +23,36 @@ function dateToLocalStr(d){
   return `${y}-${m}-${day}`;
 }
 
-function today(){
-  return dateToLocalStr(new Date());
-}
+function today(){ return dateToLocalStr(new Date()); }
 
 function cairoMidnight(dateStr){
   const [y, m, d] = dateStr.split("-").map(Number);
-  const utcDate = Date.UTC(y, m - 1, d, 0, 0, 0);
-  return new Date(utcDate);
+  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
 }
 
 function daysDiff(ds){ 
   if (!ds) return null;
   const date1 = cairoMidnight(ds);
   const date2 = cairoMidnight(today());
-  const diffTime = date1.getTime() - date2.getTime();
-  return Math.round(diffTime / (1000 * 60 * 60 * 24));
+  return Math.round((date1.getTime() - date2.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 // ============================================================
 // ============ أدوات مساعدة ============
 // ============================================================
+let data = {
+  users:[], products:[], orders:[], suppliers:[], cuts:[],
+  pieceWork:[], advances:[], payments:[], supPayments:[],
+  attendance:[], weeklyPay:[],
+  nextId:{user:1,prod:1,ord:1,sup:1,cut:1,work:1,adv:1,pay:1,spay:1,wp:1}
+};
+
+let dashChart = null;
+let confirmCb = null;
+let currentWeekStart = null;
+let editContext = { type: null, id: null };
+let customSaveHandler = null;
+
 function save(){ localStorage.setItem(KEY, JSON.stringify(data)); }
 function load(){ const s = localStorage.getItem(KEY); if(s){ try{ data = JSON.parse(s); }catch(e){} } }
 function fmt(n){ n = Number(n)||0; return Math.round(n).toLocaleString("en-US"); }
@@ -89,7 +67,7 @@ function toast(msg, type="success"){
 }
 
 // ============================================================
-// ============ المستخدمين ============
+// ============ تسجيل الدخول (بدون مستخدمين متعددين) ============
 // ============================================================
 function loadUsers(){
   const s = localStorage.getItem(USERS_KEY);
@@ -99,125 +77,36 @@ function loadUsers(){
       if (Array.isArray(arr) && arr.length) return arr;
     } catch(e){}
   }
-  const defaultAdmin = {
+  return [{
     id: 1, username: "admin", fullName: "المدير العام",
-    password: "mshana2711#", role: "admin",
-    permissions: SECTIONS.map(s => s.key),
-    createdAt: today(), active: true
-  };
-  localStorage.setItem(USERS_KEY, JSON.stringify([defaultAdmin]));
-  return [defaultAdmin];
+    password: "mshana2711#", role: "admin", active: true
+  }];
 }
-function saveUsers(users){ localStorage.setItem(USERS_KEY, JSON.stringify(users)); }
 
 function currentUser(){
-  const id = Number(sessionStorage.getItem(CURRENT_USER_KEY));
-  if (!id) return null;
-  return loadUsers().find(u => u.id === id) || null;
-}
-function setCurrentUser(id){ sessionStorage.setItem(CURRENT_USER_KEY, String(id)); }
-
-// ============================================================
-// ============ الأجهزة ============
-// ============================================================
-function loadDevices(){ const s = localStorage.getItem(DEVICES_KEY); return s ? JSON.parse(s) : []; }
-function saveDevices(devs){ localStorage.setItem(DEVICES_KEY, JSON.stringify(devs)); }
-
-function getDeviceId(){
-  let id = localStorage.getItem("mshana_device_id");
-  if (!id) {
-    id = "dev_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-    localStorage.setItem("mshana_device_id", id);
-  }
-  return id;
-}
-function detectDeviceInfo(){
-  const ua = navigator.userAgent;
-  let browser = "متصفح غير معروف";
-  if (ua.includes("Edg")) browser = "Edge";
-  else if (ua.includes("Chrome")) browser = "Chrome";
-  else if (ua.includes("Firefox")) browser = "Firefox";
-  else if (ua.includes("Safari")) browser = "Safari";
-
-  let os = "نظام غير معروف";
-  if (ua.includes("Windows")) os = "Windows";
-  else if (ua.includes("Android")) os = "Android";
-  else if (/iPhone|iPad|iPod/.test(ua)) os = "iOS";
-  else if (ua.includes("Mac")) os = "macOS";
-  else if (ua.includes("Linux")) os = "Linux";
-
-  const deviceType = /Mobile|Android|iPhone|iPad/i.test(ua) ? "📱 موبايل" : "💻 كمبيوتر";
-  return { browser, os, deviceType };
-}
-function registerDevice(user){
-  const id = getDeviceId();
-  const info = detectDeviceInfo();
-  const devices = loadDevices();
-  let dev = devices.find(d => d.id === id);
-  if (!dev) {
-    dev = {
-      id, ...info,
-      createdAt: today(),
-      lastLogin: new Date().toISOString(),
-      lastUser: user.username,
-      usersLogged: [user.username],
-      logins: 1
-    };
-    devices.push(dev);
-  } else {
-    dev.lastLogin = new Date().toISOString();
-    dev.lastUser = user.username;
-    dev.logins = (dev.logins || 0) + 1;
-    if (!dev.usersLogged) dev.usersLogged = [];
-    if (!dev.usersLogged.includes(user.username)) dev.usersLogged.push(user.username);
-  }
-  saveDevices(devices);
+  return { id: 1, username: "admin", fullName: "المدير العام", role: "admin", active: true };
 }
 
-// ============================================================
-// ============ تسجيل الدخول ============
-// ============================================================
 function doLogin(){
   const username = (document.getElementById("loginUsername").value || "").trim().toLowerCase();
   const pass = document.getElementById("pwInput").value;
   const errBox = document.getElementById("loginErr");
   
-  if (!username || !pass) {
-    errBox.textContent = "❌ أدخل اسم المستخدم وكلمة السر";
-    errBox.style.display = "block";
-    return;
-  }
-  
   const users = loadUsers();
   const user = users.find(u => u.username.toLowerCase() === username);
   
-  if (!user) {
-    errBox.textContent = "❌ اسم المستخدم غير موجود";
+  if (!user || user.password !== pass) {
+    errBox.textContent = "❌ بيانات الدخول غير صحيحة";
     errBox.style.display = "block";
     document.getElementById("pwInput").value = "";
-    return;
-  }
-  
-  if (user.password !== pass) {
-    errBox.textContent = "❌ كلمة السر غير صحيحة";
-    errBox.style.display = "block";
-    document.getElementById("pwInput").value = "";
-    return;
-  }
-  
-  if (user.active === false) {
-    errBox.textContent = "❌ الحساب موقوف";
-    errBox.style.display = "block";
     return;
   }
   
   errBox.style.display = "none";
-  setCurrentUser(user.id);
-  registerDevice(user);
+  sessionStorage.setItem(CURRENT_USER_KEY, "1");
   document.getElementById("login").style.display = "none";
   document.getElementById("app").style.display = "block";
   load();
-  applyPermissions();
   renderAll();
   updateUserBadge();
   toast(`أهلاً ${user.fullName || user.username} 👋`);
@@ -237,47 +126,18 @@ function logout(){
 })();
 
 // ============================================================
-// ============ الصلاحيات ============
+// ============ الصلاحيات (دائماً Admin) ============
 // ============================================================
-function hasPermission(section) {
-  const u = currentUser();
-  if (!u) return false;
-  if (u.role === "admin") return true;
-  return (u.permissions || []).includes(section);
-}
-
-function applyPermissions(){
-  const u = currentUser();
-  if (!u) return;
-  
-  document.querySelectorAll(".admin-only").forEach(el => {
-    el.style.display = (u.role === "admin") ? "" : "none";
-  });
-  
-  document.querySelectorAll(".nav-item").forEach(n => {
-    const onclick = n.getAttribute("onclick") || "";
-    const match = onclick.match(/go\('([^']+)'/);
-    if (!match) return;
-    const section = match[1].replace(/-/g, "_");
-    if (u.role !== "admin" && !hasPermission(section)) {
-      n.style.display = "none";
-    } else {
-      n.style.display = "";
-    }
-  });
-  
-  updateUserBadge();
-}
+function hasPermission(){ return true; }
 
 function updateUserBadge(){
   const u = currentUser();
-  if (!u) return;
   const nameEl = document.getElementById("userName");
   const roleEl = document.getElementById("userRole");
   const avatarEl = document.getElementById("userAvatar");
   if (nameEl) nameEl.textContent = u.fullName || u.username;
-  if (roleEl) roleEl.textContent = (u.role === "admin") ? "👑 مدير" : "👤 مستخدم";
-  if (avatarEl) avatarEl.textContent = ((u.fullName || u.username) || "U").trim().charAt(0).toUpperCase();
+  if (roleEl) roleEl.textContent = "👑 مدير";
+  if (avatarEl) avatarEl.textContent = ((u.fullName || u.username) || "A").trim().charAt(0).toUpperCase();
 }
 
 // ============================================================
@@ -298,10 +158,8 @@ function toggleTheme(){
 function toggleSidebar(){ document.getElementById("sidebar").classList.toggle("open"); }
 
 // ============================================================
-// ============ محرك التعديل الشامل ============
+// ============ محرك التعديل ============
 // ============================================================
-let customSaveHandler = null;
-
 function openEditModal(title, html, type, id) {
   editContext = { type, id };
   document.getElementById("editModalTitle").textContent = "✏️ " + title;
@@ -359,7 +217,6 @@ function saveEdit() {
       c.name = document.getElementById("edit-cut-name").value.trim();
       c.product_id = Number(document.getElementById("edit-cut-product").value);
       c.qty = Number(document.getElementById("edit-cut-qty").value) || c.qty;
-      c.supplier_id = Number(document.getElementById("edit-cut-supplier").value) || null;
       c.date = document.getElementById("edit-cut-date").value;
       c.note = document.getElementById("edit-cut-note").value;
     } else if (type === "work") {
@@ -372,10 +229,6 @@ function saveEdit() {
       const a = data.advances.find(x => x.id === id);
       a.amount = Number(document.getElementById("edit-adv-amount").value) || a.amount;
       a.note = document.getElementById("edit-adv-note").value;
-    } else if (type === "refund") {
-      const r = data.refunds.find(x => x.id === id);
-      r.amount = Number(document.getElementById("edit-ref-amount").value) || r.amount;
-      r.note = document.getElementById("edit-ref-note").value;
     } else if (type === "payment") {
       const p = data.payments.find(x => x.id === id);
       p.amount = Number(document.getElementById("edit-pay-amount").value) || p.amount;
@@ -395,7 +248,7 @@ function saveEdit() {
 }
 
 // ============================================================
-// ============ دوال تعديل الأنواع ============
+// ============ دوال تعديل ============
 // ============================================================
 function editUser(id) {
   const u = data.users.find(x => x.id === id);
@@ -463,7 +316,6 @@ function editOrder(id) {
 function editCut(id) {
   const c = data.cuts.find(x => x.id === id);
   const prodOpts = data.products.map(p => `<option value="${p.id}" ${p.id===c.product_id?'selected':''}>${p.name}</option>`).join('');
-  const supOpts = `<option value="">— بدون —</option>` + data.suppliers.map(s => `<option value="${s.id}" ${s.id===c.supplier_id?'selected':''}>${s.name}</option>`).join('');
   const html = `
     <label>اسم القصة</label>
     <input id="edit-cut-name" value="${c.name}">
@@ -471,8 +323,6 @@ function editCut(id) {
     <select id="edit-cut-product">${prodOpts}</select>
     <label>العدد</label>
     <input type="number" id="edit-cut-qty" value="${c.qty}">
-    <label>المستورد</label>
-    <select id="edit-cut-supplier">${supOpts}</select>
     <label>التاريخ</label>
     <input type="date" id="edit-cut-date" value="${c.date || ''}">
     <label>ملاحظات</label>
@@ -500,17 +350,7 @@ function editAdvance(id) {
     <label>ملاحظة</label>
     <input id="edit-adv-note" value="${a.note || ''}">
   `;
-  openEditModal("تعديل السلفة", html, "advance", id);
-}
-function editRefund(id) {
-  const r = data.refunds.find(x => x.id === id);
-  const html = `
-    <label>المبلغ</label>
-    <input type="number" id="edit-ref-amount" value="${r.amount}">
-    <label>ملاحظة</label>
-    <input id="edit-ref-note" value="${r.note || ''}">
-  `;
-  openEditModal("تعديل الاسترداد", html, "refund", id);
+  openEditModal("تعديل المصروف", html, "advance", id);
 }
 function editPayment(id) {
   const p = data.payments.find(x => x.id === id);
@@ -531,239 +371,6 @@ function editSupPay(id) {
     <input id="edit-spay-note" value="${sp.note || ''}">
   `;
   openEditModal("تعديل دفعة المستورد", html, "supPay", id);
-}
-
-// ============================================================
-// ============ إدارة المستخدمين ============
-// ============================================================
-function renderUsers(){
-  const users = loadUsers();
-  const body = document.getElementById("usersList");
-  const me = currentUser();
-  if (!body) return;
-  
-  const permList = document.getElementById("permCheckboxes");
-  if (permList && !permList.children.length) {
-    permList.innerHTML = SECTIONS.map(s => `
-      <label style="display:flex;align-items:center;gap:6px;padding:8px;background:var(--bg);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">
-        <input type="checkbox" value="${s.key}" class="perm-check" style="width:auto;margin:0">
-        ${s.label}
-      </label>
-    `).join("");
-  }
-  
-  body.innerHTML = `<div class="table-wrap"><table>
-    <tr><th>#</th><th>المستخدم</th><th>الاسم</th><th>النوع</th><th>الصلاحيات</th><th>الحالة</th><th></th></tr>
-    ${users.map((u, i) => {
-      const permLabels = u.role === "admin" ? "👑 كل الصلاحيات" :
-        (u.permissions || []).map(p => {
-          const s = SECTIONS.find(x => x.key === p);
-          return s ? s.label : p;
-        }).join(", ") || "لا يوجد";
-      return `<tr>
-        <td>${i+1}</td>
-        <td><code style="font-family:monospace;background:var(--bg);padding:2px 6px;border-radius:4px">${u.username}</code></td>
-        <td><b>${u.fullName || "-"}</b></td>
-        <td><span class="badge ${u.role === 'admin' ? 'badge-admin' : 'machine'}">${u.role === 'admin' ? '👑 مدير' : '👤 مستخدم'}</span></td>
-        <td style="font-size:11px;max-width:250px">${permLabels}</td>
-        <td>${u.active === false ? '<span class="badge cancelled">موقوف</span>' : '<span class="badge done">نشط</span>'}</td>
-        <td>
-          <button class="btn warning sm" onclick="editUserAccount(${u.id})">✏️</button>
-          ${me && u.id !== me.id ? `<button class="btn ${u.active === false ? 'success' : 'info'} sm" onclick="toggleUserActive(${u.id})">${u.active === false ? '✅' : '⏸️'}</button>` : ''}
-          ${me && u.id !== me.id ? `<button class="btn danger sm" onclick="deleteUserAccount(${u.id})">🗑️</button>` : ''}
-        </td>
-      </tr>`;
-    }).join("")}
-  </table></div>`;
-}
-
-function addNewUser(){
-  const username = document.getElementById("newUsername").value.trim().toLowerCase();
-  const fullName = document.getElementById("newFullName").value.trim();
-  const password = document.getElementById("newPassword").value;
-  const role = document.getElementById("newRole").value;
-  const perms = Array.from(document.querySelectorAll(".perm-check:checked")).map(c => c.value);
-  
-  if (!username || username.length < 3) return toast("اسم المستخدم قصير", "error");
-  if (!password || password.length < 4) return toast("كلمة السر قصيرة (4 أحرف على الأقل)", "error");
-  if (!/^[a-z0-9_]+$/.test(username)) return toast("اسم المستخدم يجب أن يحتوي فقط على حروف إنجليزية وأرقام و _", "error");
-  
-  const users = loadUsers();
-  if (users.find(u => u.username.toLowerCase() === username)) return toast("اسم المستخدم موجود", "error");
-  
-  const newUser = {
-    id: Math.max(0, ...users.map(u => u.id)) + 1,
-    username, fullName: fullName || username,
-    password, role,
-    permissions: role === "admin" ? SECTIONS.map(s => s.key) : perms,
-    createdAt: today(), active: true
-  };
-  users.push(newUser);
-  saveUsers(users);
-  
-  const savedUsers = loadUsers();
-  const saved = savedUsers.find(x => x.id === newUser.id);
-  if (!saved || saved.password !== password) {
-    return toast("حدث خطأ في حفظ المستخدم", "error");
-  }
-  
-  renderUsers();
-  toast(`تم إضافة ${fullName || username} ✅`);
-  document.getElementById("newUsername").value = "";
-  document.getElementById("newFullName").value = "";
-  document.getElementById("newPassword").value = "";
-  document.querySelectorAll(".perm-check").forEach(c => c.checked = false);
-}
-
-function editUserAccount(id){
-  const users = loadUsers();
-  const u = users.find(x => x.id === id);
-  if (!u) return;
-  const perms = u.role === "admin" ? SECTIONS.map(s => s.key) : (u.permissions || []);
-  
-  const html = `
-    <label>اسم المستخدم</label>
-    <input id="eu-username" value="${u.username}">
-    <label>الاسم الكامل</label>
-    <input id="eu-fullname" value="${u.fullName || ''}">
-    <label>كلمة السر الجديدة (اتركها فارغة إذا لم ترد التغيير)</label>
-    <input id="eu-password" type="password" placeholder="••••••">
-    <label>النوع</label>
-    <select id="eu-role" onchange="document.getElementById('eu-perms').style.display=this.value==='admin'?'none':'block'">
-      <option value="user" ${u.role === 'user' ? 'selected' : ''}>👤 مستخدم عادي</option>
-      <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>👑 مدير (كل الصلاحيات)</option>
-    </select>
-    <div id="eu-perms" style="display:${u.role === 'admin' ? 'none' : 'block'}">
-      <label>الصلاحيات:</label>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:6px">
-        ${SECTIONS.map(s => `<label style="display:flex;align-items:center;gap:6px;padding:6px;background:var(--bg);border-radius:6px;cursor:pointer;font-size:11px"><input type="checkbox" value="${s.key}" class="eu-perm" ${perms.includes(s.key) ? 'checked' : ''} style="width:auto;margin:0">${s.label}</label>`).join("")}
-      </div>
-    </div>
-  `;
-  
-  customSaveHandler = () => {
-    const newUsername = document.getElementById("eu-username").value.trim().toLowerCase();
-    const newFullName = document.getElementById("eu-fullname").value.trim();
-    const newPassword = document.getElementById("eu-password").value;
-    const newRole = document.getElementById("eu-role").value;
-    const newPerms = Array.from(document.querySelectorAll(".eu-perm:checked")).map(c => c.value);
-    
-    if (!newUsername || newUsername.length < 3) return toast("اسم المستخدم قصير", "error");
-    if (users.find(x => x.id !== u.id && x.username.toLowerCase() === newUsername)) return toast("اسم المستخدم موجود لمستخدم آخر", "error");
-    
-    u.username = newUsername;
-    u.fullName = newFullName || newUsername;
-    u.role = newRole;
-    u.permissions = newRole === "admin" ? SECTIONS.map(s => s.key) : newPerms;
-    if (newPassword) {
-      if (newPassword.length < 4) return toast("كلمة السر قصيرة", "error");
-      u.password = newPassword;
-    }
-    
-    saveUsers(users);
-    closeEditModal();
-    renderUsers();
-    applyPermissions();
-    toast("تم حفظ التعديلات ✅");
-  };
-  
-  openEditModal("تعديل مستخدم", html, "tempUser", id);
-}
-
-function toggleUserActive(id){
-  const users = loadUsers();
-  const u = users.find(x => x.id === id);
-  if (!u) return;
-  u.active = u.active === false ? true : false;
-  saveUsers(users);
-  renderUsers();
-  toast(u.active ? "تم تنشيط الحساب ✅" : "تم إيقاف الحساب ⏸️");
-}
-
-function deleteUserAccount(id){
-  const users = loadUsers();
-  const u = users.find(x => x.id === id);
-  if (!u) return;
-  openModal("حذف مستخدم", `سيتم حذف "${u.username}" نهائياً. متابعة؟`, () => {
-    saveUsers(users.filter(x => x.id !== id));
-    renderUsers();
-    toast("تم الحذف");
-  });
-}
-
-// ============================================================
-// ============ الأجهزة ============
-// ============================================================
-function renderDevices(){
-  const devices = loadDevices();
-  const body = document.getElementById("devicesList");
-  if (!body) return;
-  if (!devices.length) {
-    body.innerHTML = emptyState("لا يوجد أجهزة مسجلة", "سيتم تسجيل الأجهزة تلقائياً عند تسجيل الدخول");
-    return;
-  }
-  body.innerHTML = devices.slice().reverse().map(d => {
-    const icon = d.deviceType.includes("موبايل") ? "📱" : "💻";
-    return `<div class="device-row">
-      <div style="display:flex;align-items:center;gap:10px;flex:1">
-        <div style="font-size:28px">${icon}</div>
-        <div class="info">
-          <div style="font-weight:700">${d.os} — ${d.browser}</div>
-          <div class="meta">آخر مستخدم: <b>${d.lastUser || "-"}</b></div>
-          <div class="meta">آخر دخول: ${new Date(d.lastLogin).toLocaleString("ar-EG", { timeZone: "Africa/Cairo" })}</div>
-          <div class="meta">مرات الدخول: ${d.logins} • أول تسجيل: ${d.createdAt}</div>
-          <div class="meta" style="font-family:monospace;font-size:10px;opacity:0.6">ID: ${d.id}</div>
-        </div>
-      </div>
-      <button class="btn danger sm" onclick="removeDevice('${d.id}')">🗑️ إزالة</button>
-    </div>`;
-  }).join("");
-}
-
-function removeDevice(id){
-  openModal("إزالة جهاز", "سيتم إزالة تسجيل هذا الجهاز من السجل. متابعة؟", () => {
-    saveDevices(loadDevices().filter(d => d.id !== id));
-    renderDevices();
-    toast("تم الحذف");
-  });
-}
-
-// ============================================================
-// ============ إعدادات الحساب ============
-// ============================================================
-function renderMyAccount(){
-  const u = currentUser();
-  const body = document.getElementById("myAccountInfo");
-  if (!u || !body) return;
-  body.innerHTML = `
-    <div style="padding:14px;background:var(--bg);border-radius:12px;margin-bottom:10px">
-      <div style="margin-bottom:6px"><b>اسم المستخدم:</b> <code style="background:var(--card);padding:2px 8px;border-radius:4px">${u.username}</code></div>
-      <div style="margin-bottom:6px"><b>الاسم الكامل:</b> ${u.fullName}</div>
-      <div style="margin-bottom:6px"><b>النوع:</b> ${u.role === 'admin' ? '👑 مدير' : '👤 مستخدم'}</div>
-      <div style="margin-bottom:6px"><b>تاريخ الإنشاء:</b> ${u.createdAt}</div>
-      <div><b>الصلاحيات:</b> ${u.role === 'admin' ? 'كل الصلاحيات' : (u.permissions || []).length + ' قسم'}</div>
-    </div>
-  `;
-}
-
-function changeMyPassword(){
-  const u = currentUser();
-  if (!u) return;
-  const cur = document.getElementById("curPw").value;
-  const nw = document.getElementById("newPw").value;
-  const conf = document.getElementById("newPwConfirm").value;
-  
-  if (cur !== u.password) return toast("كلمة السر الحالية غير صحيحة", "error");
-  if (!nw || nw.length < 4) return toast("كلمة السر الجديدة قصيرة", "error");
-  if (nw !== conf) return toast("تأكيد كلمة السر غير مطابق", "error");
-  
-  const users = loadUsers();
-  users.find(x => x.id === u.id).password = nw;
-  saveUsers(users);
-  document.getElementById("curPw").value = "";
-  document.getElementById("newPw").value = "";
-  document.getElementById("newPwConfirm").value = "";
-  toast("تم تغيير كلمة السر ✅");
 }
 
 // ============================================================
@@ -794,37 +401,98 @@ function shareReport(){
   const from = document.getElementById("repFrom").value;
   const to = document.getElementById("repTo").value;
   const inRange = (d) => (!from || d >= from) && (!to || d <= to);
-  let txt = `🌸 MS HANA — تقرير ${ROLES[u.role]}\n👤 ${u.name}\n📅 ${from||'البداية'} → ${to||'اليوم'}\n━━━━━━━━━━━━━━━━━━\n`;
+  
+  let txt = `🌸 MS HANA — تقرير ${ROLES[u.role]}\n`;
+  txt += `👤 ${u.name}\n`;
+  txt += `📅 ${from || 'البداية'} → ${to || 'اليوم'}\n`;
+  txt += `━━━━━━━━━━━━━━━━━━\n`;
   
   if (u.role === "iron" || u.role === "machine") {
+    // جلب كل عمليات الإنتاج في الفترة
     const works = data.pieceWork.filter(w => w.worker_id === wid && inRange(w.date));
-    const totalP = works.reduce((s,w) => s+w.qty, 0);
-    const totalV = works.reduce((s,w) => s+w.total, 0);
-    txt += `📦 عدد القطع: ${fmt(totalP)}\n💰 الإنتاج: ${fmt(totalV)} ج\n`;
+    
+    // تجميع حسب القصة واللون والسعر
+    const groups = {};
+    works.forEach(w => {
+      const c = data.cuts.find(x => x.id === w.cut_id);
+      const cutName = c ? c.name : (w.pname || 'بدون قصة');
+      const colorName = w.color || '';
+      const key = `${cutName}__${w.price}__${colorName}`;
+      if (!groups[key]) {
+        groups[key] = {
+          cutName,
+          colorName,
+          price: w.price,
+          qty: 0,
+          total: 0
+        };
+      }
+      groups[key].qty += w.qty;
+      groups[key].total += w.total;
+    });
+    
+    // عرض كل مجموعة
+    const groupArr = Object.values(groups);
+    let grandTotalQty = 0;
+    let grandTotalValue = 0;
+    
+    if (!groupArr.length) {
+      txt += `📭 لا يوجد إنتاج في هذه الفترة\n`;
+    } else {
+      groupArr.forEach((g, idx) => {
+        const title = g.colorName ? `${g.cutName} — ${g.colorName}` : g.cutName;
+        txt += `📦 ${title}\n`;
+        txt += `🔢 ${fmt(g.qty)} × ${fmt(g.price)} ج\n`;
+        txt += `💰 ${fmt(g.total)} ج\n`;
+        if (idx < groupArr.length - 1) txt += `────────────────\n`;
+        grandTotalQty += g.qty;
+        grandTotalValue += g.total;
+      });
+      
+      txt += `━━━━━━━━━━━━━━━━━━\n`;
+      txt += `📊 الإجمالي الكلي:\n`;
+      txt += `📦 عدد القطع: ${fmt(grandTotalQty)}\n`;
+      txt += `💰 إجمالي الإنتاج: ${fmt(grandTotalValue)} ج\n`;
+      
+      // إضافة الخصومات
+      const advTotal = totalAdv(wid);
+      const paidTotal = totalPaid(wid);
+      if (advTotal > 0 || paidTotal > 0) {
+        txt += `━━━━━━━━━━━━━━━━━━\n`;
+        if (advTotal > 0) txt += `💸 المصاريف: ${fmt(advTotal)} ج\n`;
+        if (paidTotal > 0) txt += `💵 المدفوع: ${fmt(paidTotal)} ج\n`;
+        const net = grandTotalValue - advTotal - paidTotal;
+        txt += `✅ الصافي: ${fmt(net)} ج\n`;
+      }
+    }
+    
   } else {
+    // أرضية/أوفر
     const att = data.attendance.filter(a => a.worker_id === wid && inRange(a.date));
     const present = att.filter(a => a.present).length;
     const totalEarn = att.filter(a => a.present).reduce((s,a) => s + (Number(a.pay)||0), 0);
-    txt += `📅 أيام الحضور: ${present}\n💰 المستحقات: ${fmt(totalEarn)} ج\n`;
+    const weeklyPaid = data.weeklyPay.filter(wp => wp.worker_id===wid && inRange(wp.date)).reduce((s,wp) => s+wp.amount, 0);
+    const advTotal = totalAdv(wid);
+    const net = totalEarn - advTotal - weeklyPaid;
+    
+    txt += `📅 أيام الحضور: ${present}\n`;
+    txt += `💰 إجمالي المستحقات: ${fmt(totalEarn)} ج\n`;
+    if (advTotal > 0) txt += `💸 المصاريف: ${fmt(advTotal)} ج\n`;
+    if (weeklyPaid > 0) txt += `💵 القبض الأسبوعي: ${fmt(weeklyPaid)} ج\n`;
+    txt += `━━━━━━━━━━━━━━━━━━\n`;
+    txt += `✅ الصافي: ${fmt(net)} ج\n`;
   }
-  txt += `━━━━━━━━━━━━━━━━━━\n📅 ${today()}`;
+  
+  txt += `━━━━━━━━━━━━━━━━━━\n`;
+  txt += `📅 ${today()}`;
   
   if (navigator.share) {
-    navigator.share({ title: "تقرير عامل", text: txt }).then(()=>toast("تمت المشاركة ✅")).catch(()=>copyToClipboard(txt));
-  } else copyToClipboard(txt);
-}
-function copyToClipboard(txt){
-  if (navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(txt).then(()=>toast("تم النسخ ✅")).catch(()=>fallbackCopy(txt));
-  } else fallbackCopy(txt);
-}
-function fallbackCopy(txt){
-  const ta = document.createElement("textarea");
-  ta.value = txt; ta.style.position="fixed"; ta.style.opacity="0";
-  document.body.appendChild(ta); ta.select();
-  try{ document.execCommand("copy"); toast("تم النسخ ✅"); }
-  catch(e){ toast("تعذر النسخ", "error"); }
-  ta.remove();
+    navigator.share({ title: "تقرير عامل", text: txt })
+      .then(()=>toast("تمت المشاركة ✅"))
+      .catch(()=>copyToClipboard(txt));
+  } else {
+    copyToClipboard(txt);
+  }
 }
 
 // ============================================================
@@ -833,13 +501,23 @@ function fallbackCopy(txt){
 function totalWork(wid){ return data.pieceWork.filter(w=>w.worker_id===wid).reduce((s,w)=>s+w.total,0); }
 function totalPieces(wid){ return data.pieceWork.filter(w=>w.worker_id===wid).reduce((s,w)=>s+w.qty,0); }
 function totalAdv(wid){ return data.advances.filter(a=>a.worker_id===wid).reduce((s,a)=>s+a.amount,0); }
-function totalRef(wid){ return data.refunds.filter(r=>r.worker_id===wid).reduce((s,r)=>s+r.amount,0); }
-function remainingAdv(wid){ return totalAdv(wid) - totalRef(wid); }
 function totalPaid(wid){ return data.payments.filter(p=>p.worker_id===wid).reduce((s,p)=>s+p.amount,0); }
 function totalWeeklyPaid(wid){ return data.weeklyPay.filter(p=>p.worker_id===wid).reduce((s,p)=>s+p.amount,0); }
 
+// الصافي = الإنتاج - المصاريف - المدفوع
+function netForWorker(wid) {
+  const u = data.users.find(x => x.id === wid);
+  if (!u) return 0;
+  if (u.role === "iron" || u.role === "machine") {
+    return totalWork(wid) - totalAdv(wid) - totalPaid(wid);
+  } else {
+    const earn = data.attendance.filter(a => a.worker_id===wid && a.present).reduce((s,a) => s + (Number(a.pay)||0), 0);
+    return earn - totalAdv(wid) - totalPaid(wid) - totalWeeklyPaid(wid);
+  }
+}
+
 // ============================================================
-// ============ الأسبوع (بتوقيت القاهرة) ============
+// ============ الأسبوع ============
 // ============================================================
 function weekStartOf(dateStr){
   const d = new Date(dateStr + "T00:00:00");
@@ -928,15 +606,14 @@ function renderDashboard(){
   let machineDues = 0, makwaDues = 0, floorDues = 0;
   
   data.users.filter(u => u.role==="iron" || u.role==="machine").forEach(u => {
-    const n = totalWork(u.id) - remainingAdv(u.id) - totalPaid(u.id);
+    const n = netForWorker(u.id);
     if (u.role === "iron") makwaDues += n;
     if (u.role === "machine") machineDues += n;
   });
 
   let dailyDues = 0;
   data.users.filter(u => u.role==="floor" || u.role==="overlock").forEach(u => {
-    const totalEarnings = data.attendance.filter(a => a.worker_id===u.id && a.present).reduce((s,a) => s + (Number(a.pay)||0), 0);
-    const n = totalEarnings - remainingAdv(u.id) - totalPaid(u.id) - totalWeeklyPaid(u.id);
+    const n = netForWorker(u.id);
     if (u.role === "floor") floorDues += n;
     dailyDues += n;
   });
@@ -1011,8 +688,7 @@ function renderInventory(){
     else if (u.role === "floor" || u.role === "overlock") totalCost += data.attendance.filter(a => a.worker_id===u.id && a.present).reduce((s,a) => s + (Number(a.pay)||0), 0);
   });
 
-  const totalAdvance = data.advances.reduce((s,a) => s+a.amount, 0);
-  const totalRefund = data.refunds.reduce((s,r) => s+r.amount, 0);
+  const totalExpenses = data.advances.reduce((s,a) => s+a.amount, 0);
   const totalPaidOut = data.payments.reduce((s,p) => s+p.amount, 0) + data.weeklyPay.reduce((s,p) => s+p.amount, 0);
   
   const kpisEl = document.getElementById("invKpis");
@@ -1021,24 +697,22 @@ function renderInventory(){
     <div class="kpi green"><div class="kpi-label">💵 إجمالي أرباح الطلبات</div><div class="kpi-value">${fmt(totalRev)} ج</div></div>
     <div class="kpi red"><div class="kpi-label">💸 تكلفة العمال</div><div class="kpi-value">${fmt(totalCost)} ج</div></div>
     <div class="kpi purple"><div class="kpi-label">📈 صافي ربح متوقع</div><div class="kpi-value ${totalRev-totalCost>=0?'pos':'neg'}">${fmt(totalRev-totalCost)} ج</div></div>
-    <div class="kpi orange"><div class="kpi-label">💸 مصاريف ممنوحة</div><div class="kpi-value">${fmt(totalAdvance)} ج</div></div>
-    <div class="kpi blue"><div class="kpi-label">💵 خصومات</div><div class="kpi-value">${fmt(totalRefund)} ج</div></div>
+    <div class="kpi orange"><div class="kpi-label">💸 مصاريف</div><div class="kpi-value">${fmt(totalExpenses)} ج</div></div>
     <div class="kpi purple"><div class="kpi-label">💰 المدفوع للعمال</div><div class="kpi-value">${fmt(totalPaidOut)} ج</div></div>
   `;
 
   const teamBody = document.getElementById("invTeamBody");
   if (teamBody) teamBody.innerHTML = data.users.map((u, index) => {
-    let net, detail;
+    let detail;
     if (u.role==="iron" || u.role==="machine") {
       const p = totalPieces(u.id), v = totalWork(u.id);
-      net = v - remainingAdv(u.id) - totalPaid(u.id);
       detail = `${fmt(p)} قطعة - إنتاج ${fmt(v)} ج`;
     } else {
       const a = data.attendance.filter(x => x.worker_id===u.id && x.present).length;
       const earn = data.attendance.filter(x => x.worker_id===u.id && x.present).reduce((s,x) => s + (Number(x.pay)||0), 0);
-      net = earn - remainingAdv(u.id) - totalPaid(u.id) - totalWeeklyPaid(u.id);
       detail = `${a} يوم حضور - مستحقات ${fmt(earn)} ج`;
     }
+    const net = netForWorker(u.id);
     return `<tr><td>${index+1}</td><td><b>${u.name}</b></td><td><span class="badge ${u.role}">${ROLES[u.role]}</span></td><td>${detail}</td><td class="${net>=0?'pos':'neg'}">${fmt(net)} ج</td></tr>`;
   }).join("");
 
@@ -1073,12 +747,7 @@ function renderTeam(){
   body.innerHTML = `<div class="table-wrap"><table>
     <tr><th>#</th><th>الاسم</th><th>الدور</th><th>الأجر الأسبوعي</th><th>الصافي</th><th></th></tr>
     ${data.users.map((u, index) => {
-      let net;
-      if (u.role==="iron" || u.role==="machine") net = totalWork(u.id) - remainingAdv(u.id) - totalPaid(u.id);
-      else {
-        const earn = data.attendance.filter(a => a.worker_id===u.id && a.present).reduce((s,a) => s + (Number(a.pay)||0), 0);
-        net = earn - remainingAdv(u.id) - totalPaid(u.id) - totalWeeklyPaid(u.id);
-      }
+      const net = netForWorker(u.id);
       const rateTxt = (u.role==="floor"||u.role==="overlock") ? (getWeeklyRate(u) ? fmt(getWeeklyRate(u)) + ' ج' : '-') : '-';
       return `<tr><td>${index+1}</td><td><b>${u.name}</b></td><td><span class="badge ${u.role}">${ROLES[u.role]}</span></td><td>${rateTxt}</td><td class="${net>=0?'pos':'neg'}">${fmt(net)} ج</td><td><button class="btn info sm" onclick="viewWorker(${u.id})">👁️</button> <button class="btn warning sm" onclick="editUser(${u.id})">✏️</button> <button class="btn danger sm" onclick="delUser(${u.id})">🗑️</button></td></tr>`;
     }).join("")}
@@ -1086,7 +755,6 @@ function renderTeam(){
 }
 
 function addTeam(){
-  if (!hasPermission("team")) return toast("لا تملك صلاحية", "error");
   const name = document.getElementById("teamName").value.trim();
   const role = document.getElementById("teamRole").value;
   const rate = Number(document.getElementById("teamDailyRate").value) || 0;
@@ -1101,13 +769,11 @@ function addTeam(){
   toast(`تم إضافة ${name} ✅`);
 }
 function delUser(id){
-  if (!hasPermission("team")) return toast("لا تملك صلاحية", "error");
   const u = data.users.find(x => x.id===id);
   openModal("حذف عضو", `سيتم حذف "${u.name}" وكل عملياته. متابعة؟`, () => {
     data.users = data.users.filter(x => x.id!==id);
     data.pieceWork = data.pieceWork.filter(x => x.worker_id!==id);
     data.advances = data.advances.filter(x => x.worker_id!==id);
-    data.refunds = data.refunds.filter(x => x.worker_id!==id);
     data.payments = data.payments.filter(x => x.worker_id!==id);
     data.attendance = data.attendance.filter(x => x.worker_id!==id);
     data.weeklyPay = data.weeklyPay.filter(x => x.worker_id!==id);
@@ -1120,10 +786,10 @@ function viewWorker(id){
   if (u.role==="iron" || u.role==="machine") {
     const works = data.pieceWork.filter(w => w.worker_id===id);
     html += `<p style="color:var(--text-muted);margin:10px 0">📦 إنتاج: ${fmt(totalPieces(id))} قطعة • 💰 ${fmt(totalWork(id))} ج</p>`;
-    html += `<table><tr><th>الصنف</th><th>اللون</th><th>العدد</th><th>الإجمالي</th></tr>`;
+    html += `<table><tr><th>القصة</th><th>اللون</th><th>العدد</th><th>الإجمالي</th></tr>`;
     works.forEach(w => {
-      const p = data.products.find(x => x.id===w.product_id);
-      html += `<tr><td>${p?p.name:'?'}</td><td>${w.color||'-'}</td><td>${fmt(w.qty)}</td><td>${fmt(w.total)} ج</td></tr>`;
+      const c = data.cuts.find(x => x.id===w.cut_id);
+      html += `<tr><td>${c?c.name:'?'}</td><td>${w.color||'-'}</td><td>${fmt(w.qty)}</td><td>${fmt(w.total)} ج</td></tr>`;
     });
     html += `</table>`;
   } else {
@@ -1138,8 +804,7 @@ function viewWorker(id){
     html += `</table>`;
   }
   html += `<div style="margin-top:14px">
-    <p>💸 المصاريف: ${fmt(totalAdv(id))} ج • الخصومات: ${fmt(totalRef(id))} ج • المتبقي: ${fmt(remainingAdv(id))} ج</p>
-    <p>💵 مدفوع: ${fmt(totalPaid(id))} ج</p>
+    <p>💸 مصاريف: ${fmt(totalAdv(id))} ج • 💵 مدفوع: ${fmt(totalPaid(id))} ج • الصافي: ${fmt(netForWorker(id))} ج</p>
   </div></div>`;
   openInfoModal("كشف حساب العامل", html);
 }
@@ -1157,7 +822,6 @@ function renderProducts(){
   </table></div>`;
 }
 function addProduct(){
-  if (!hasPermission("products")) return toast("لا تملك صلاحية", "error");
   const name = document.getElementById("prodName").value.trim();
   const pi = Number(document.getElementById("prodIron").value) || 0;
   const pm = Number(document.getElementById("prodMachine").value) || 0;
@@ -1171,7 +835,6 @@ function addProduct(){
   toast(`تم إضافة ${name} ✅`);
 }
 function delProduct(id){
-  if (!hasPermission("products")) return toast("لا تملك صلاحية", "error");
   const p = data.products.find(x => x.id===id);
   openModal("حذف صنف", `حذف "${p.name}" وكل عملياته؟`, () => {
     data.products = data.products.filter(x => x.id!==id);
@@ -1183,7 +846,7 @@ function delProduct(id){
 }
 
 // ============================================================
-// ============ Cuts ============
+// ============ Cuts (بدون مستورد) ============
 // ============================================================
 function renderCuts(){
   const pSel = document.getElementById("cutProduct");
@@ -1191,10 +854,6 @@ function renderCuts(){
   const pv = pSel.value;
   pSel.innerHTML = `<option value="">— اختار —</option>` + data.products.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
   pSel.value = pv;
-  const sSel = document.getElementById("cutSupplier");
-  const sv = sSel.value;
-  sSel.innerHTML = `<option value="">— بدون —</option>` + data.suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
-  sSel.value = sv;
   if (!document.getElementById("cutColorsList").children.length) addColorRow();
   
   const filter = document.getElementById("cutFilter").value;
@@ -1211,7 +870,6 @@ function renderCuts(){
   
   body.innerHTML = cuts.map(c => {
     const p = data.products.find(x => x.id===c.product_id);
-    const s = data.suppliers.find(x => x.id===c.supplier_id);
     const distM = cutDistributed(c.id, "machine");
     const distI = cutDistributed(c.id, "iron");
     const remM = c.qty - distM;
@@ -1231,7 +889,7 @@ function renderCuts(){
     }).join("");
     return `<div class="order-card">
       <div class="order-header">
-        <div><div class="order-title">✂️ ${c.name}</div><div style="font-size:11px;color:var(--text-muted);margin-top:4px">📦 ${p?p.name:'?'} ${s?' • 🏭 '+s.name:''} • 📅 ${c.date||'-'}</div></div>
+        <div><div class="order-title">✂️ ${c.name}</div><div style="font-size:11px;color:var(--text-muted);margin-top:4px">📦 ${p?p.name:'?'} • 📅 ${c.date||'-'}</div></div>
         <span class="badge ${st==='done'?'done':st==='closed'?'cancelled':'pending'}">${labels[st]}</span>
       </div>
       <div class="order-stats">
@@ -1267,11 +925,9 @@ function updateColorsTotal(){
   document.getElementById("cutColorsTotal").textContent = total;
 }
 function addCut(){
-  if (!hasPermission("cuts")) return toast("لا تملك صلاحية", "error");
   const name = document.getElementById("cutName").value.trim();
   const pid = Number(document.getElementById("cutProduct").value);
   const qty = Number(document.getElementById("cutQty").value);
-  const sid = Number(document.getElementById("cutSupplier").value) || null;
   const date = document.getElementById("cutDate").value;
   const note = document.getElementById("cutNote").value;
   if (name.length < 2) return toast("اسم قصير", "error");
@@ -1284,7 +940,7 @@ function addCut(){
     if (cname && cqty > 0) { colors.push({ name: cname, qty: cqty }); ct += cqty; }
   });
   if (ct > qty) return toast(`إجمالي الألوان (${ct}) أكبر من العدد (${qty})`, "error");
-  data.cuts.push({ id: data.nextId.cut++, name, product_id: pid, qty, supplier_id: sid, date, note, colors, status: "open", created: today() });
+  data.cuts.push({ id: data.nextId.cut++, name, product_id: pid, qty, date, note, colors, status: "open", created: today() });
   save(); renderAll();
   document.getElementById("cutName").value = "";
   document.getElementById("cutQty").value = "";
@@ -1294,7 +950,6 @@ function addCut(){
   toast(`تم تسجيل القصّة ✅`);
 }
 function delCut(id){
-  if (!hasPermission("cuts")) return toast("لا تملك صلاحية", "error");
   const c = data.cuts.find(x => x.id===id);
   const distM = cutDistributed(id, "machine");
   const distI = cutDistributed(id, "iron");
@@ -1304,7 +959,6 @@ function delCut(id){
 function viewCut(id){
   const c = data.cuts.find(x => x.id===id);
   const p = data.products.find(x => x.id===c.product_id);
-  const s = data.suppliers.find(x => x.id===c.supplier_id);
   const distM = cutDistributed(id, "machine");
   const distI = cutDistributed(id, "iron");
   const colorsRows = (c.colors||[]).map(col => {
@@ -1318,7 +972,7 @@ function viewCut(id){
     return `<tr><td>${u?u.name:'?'}</td><td><span class="badge ${u?u.role:''}">${u?ROLES[u.role]:''}</span></td><td>${w.color||'-'}</td><td>${fmt(w.qty)}</td><td>${w.date}</td></tr>`;
   }).join("") || `<tr><td colspan="5">لا يوجد توزيع</td></tr>`;
   const html = `<div><h3>✂️ ${c.name}</h3>
-    <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px">📦 ${p?p.name:'?'} ${s?' • 🏭 '+s.name:''}</p>
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px">📦 ${p?p.name:'?'}</p>
     <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
       <div class="kpi"><div class="kpi-label">إجمالي</div><div class="kpi-value">${fmt(c.qty)}</div></div>
       <div class="kpi green"><div class="kpi-label">⚙️ مكن</div><div class="kpi-value">${fmt(distM)}</div></div>
@@ -1334,13 +988,12 @@ function viewCut(id){
   openInfoModal("تفاصيل القصّة", html);
 }
 function exportCuts(){
-  let csv = "القصّة,الصنف,المستورد,العدد,موزع مكن,باقي مكن,موزع مكوة,باقي مكوة,التاريخ\n";
+  let csv = "القصّة,الصنف,العدد,موزع مكن,باقي مكن,موزع مكوة,باقي مكوة,التاريخ\n";
   data.cuts.forEach(c => {
     const p = data.products.find(x => x.id===c.product_id);
-    const s = data.suppliers.find(x => x.id===c.supplier_id);
     const distM = cutDistributed(c.id, "machine");
     const distI = cutDistributed(c.id, "iron");
-    csv += `${c.name},${p?p.name:""},${s?s.name:""},${c.qty},${distM},${c.qty-distM},${distI},${c.qty-distI},${c.date||""}\n`;
+    csv += `${c.name},${p?p.name:""},${c.qty},${distM},${c.qty-distM},${distI},${c.qty-distI},${c.date||""}\n`;
   });
   downloadCSV(csv, `cuts_${today()}.csv`);
 }
@@ -1409,7 +1062,6 @@ function renderOrders(){
   }).join("");
 }
 function addOrder(){
-  if (!hasPermission("orders")) return toast("لا تملك صلاحية", "error");
   const sid = Number(document.getElementById("ordSupplier").value);
   const pid = Number(document.getElementById("ordProduct").value);
   const qty = Number(document.getElementById("ordQty").value);
@@ -1428,7 +1080,6 @@ function addOrder(){
   toast("تم حفظ الطلب ✅");
 }
 function deliverOrder(id){
-  if (!hasPermission("orders")) return toast("لا تملك صلاحية", "error");
   const o = data.orders.find(x => x.id===id);
   const rem = orderRemaining(o);
   const qty = prompt(`تسليم دفعة\n\nالباقي: ${rem} قطعة\n\nاكتب الكمية:`);
@@ -1442,7 +1093,6 @@ function deliverOrder(id){
   toast(`تم تسليم ${n} قطعة ✅`);
 }
 function delOrder(id){
-  if (!hasPermission("orders")) return toast("لا تملك صلاحية", "error");
   openModal("حذف طلب", "سيتم الحذف.", () => { data.orders = data.orders.filter(x => x.id!==id); save(); renderAll(); toast("تم الحذف"); });
 }
 function exportOrders(){
@@ -1457,7 +1107,7 @@ function exportOrders(){
 }
 
 // ============================================================
-// ============ Work Machine ============
+// ============ Work Machine (بدون طلب وصنف) ============
 // ============================================================
 function renderWorkMachine(){
   const wSel = document.getElementById("workWorkerMachine");
@@ -1466,16 +1116,6 @@ function renderWorkMachine(){
   const workers = data.users.filter(u => u.role==="machine");
   wSel.innerHTML = `<option value="">— اختار —</option>` + workers.map(u => `<option value="${u.id}">${u.name}</option>`).join("");
   wSel.value = wv;
-  filterWorkProductsMachine();
-  
-  const oSel = document.getElementById("workOrderMachine");
-  const ov = oSel.value;
-  oSel.innerHTML = `<option value="">— بدون —</option>` + data.orders.filter(o => orderStatus(o)!=="done" && orderStatus(o)!=="cancelled").map(o => {
-    const s = data.suppliers.find(x => x.id===o.supplier_id);
-    const p = data.products.find(x => x.id===o.product_id);
-    return `<option value="${o.id}">${s?s.name:'?'} — ${p?p.name:'?'} (${orderRemaining(o)})</option>`;
-  }).join("");
-  oSel.value = ov;
   
   const cSel = document.getElementById("workCutMachine");
   const cv = cSel.value;
@@ -1492,21 +1132,13 @@ function renderWorkMachine(){
   const body = document.getElementById("workLogsMachine");
   if (!logs.length) { body.innerHTML = emptyState("لا يوجد إنتاج مسجل للمكن", "سجل أول إنتاج"); return; }
   body.innerHTML = `<div class="table-wrap"><table>
-    <tr><th>الصنايعي</th><th>الصنف</th><th>اللون</th><th>العدد</th><th>السعر</th><th>الإجمالي</th><th></th></tr>
+    <tr><th>الصنايعي</th><th>القصة</th><th>اللون</th><th>العدد</th><th>السعر</th><th>الإجمالي</th><th></th></tr>
     ${logs.map(l => {
       const u = data.users.find(x => x.id===l.worker_id);
-      const p = data.products.find(x => x.id===l.product_id);
-      return `<tr><td>${u?u.name:'?'}</td><td>${p?p.name:'?'}</td><td>${l.color||'-'}</td><td>${fmt(l.qty)}</td><td>${fmt(l.price)} ج</td><td><b>${fmt(l.total)} ج</b></td><td><button class="btn warning sm" onclick="editWork(${l.id})">✏️</button> <button class="btn danger sm" onclick="delWork(${l.id})">🗑️</button></td></tr>`;
+      const c = data.cuts.find(x => x.id===l.cut_id);
+      return `<tr><td>${u?u.name:'?'}</td><td>${c?c.name:'?'}</td><td>${l.color||'-'}</td><td>${fmt(l.qty)}</td><td>${fmt(l.price)} ج</td><td><b>${fmt(l.total)} ج</b></td><td><button class="btn warning sm" onclick="editWork(${l.id})">✏️</button> <button class="btn danger sm" onclick="delWork(${l.id})">🗑️</button></td></tr>`;
     }).join("")}
   </table></div>`;
-}
-function filterWorkProductsMachine(){
-  const wid = Number(document.getElementById("workWorkerMachine").value);
-  const sel = document.getElementById("workProductMachine");
-  const u = data.users.find(x => x.id===wid);
-  if (!u) { sel.innerHTML = `<option value="">— اختار الصنايعي —</option>`; return; }
-  const prods = data.products.filter(p => p.price_machine > 0);
-  sel.innerHTML = `<option value="">— اختار —</option>` + prods.map(p => `<option value="${p.id}">${p.name} (${fmt(p.price_machine)} ج)</option>`).join("");
 }
 function updateCutRemainingMachine(){
   const cid = Number(document.getElementById("workCutMachine").value);
@@ -1531,41 +1163,37 @@ function updateWorkColorsMachine(){
   colorSel.innerHTML = `<option value="">— بدون —</option>` + avail.map(x => `<option value="${x.name}">${x.name} (باقي: ${x.remaining})</option>`).join("");
 }
 function addWorkMachine(){
-  if (!hasPermission("work_machine")) return toast("لا تملك صلاحية", "error");
   const wid = Number(document.getElementById("workWorkerMachine").value);
-  const pid = Number(document.getElementById("workProductMachine").value);
   const qty = Number(document.getElementById("workQtyMachine").value);
-  const oid = Number(document.getElementById("workOrderMachine").value) || 0;
   const cid = Number(document.getElementById("workCutMachine").value) || 0;
   const color = document.getElementById("workColorMachine").value || null;
   if (!wid) return toast("اختار الصنايعي", "error");
-  if (!pid) return toast("اختار الصنف", "error");
   if (!qty || qty <= 0) return toast("عدد غير صحيح", "error");
+  if (!cid) return toast("اختار القصة", "error");
   
-  if (cid) {
-    const c = data.cuts.find(x => x.id===cid);
-    const rem = c.qty - cutDistributed(cid, "machine");
-    if (qty > rem) return toast(`الباقي للمكن ${rem} فقط`, "error");
-    if (color) {
-      const col = (c.colors||[]).find(x => x.name===color);
-      if (col) {
-        const cd = cutColorDistributed(cid, color, "machine");
-        const cr = col.qty - cd;
-        if (qty > cr) return toast(`الباقي من اللون ${color} للمكن = ${cr} فقط`, "error");
-      }
+  const c = data.cuts.find(x => x.id===cid);
+  if (!c) return toast("القصة غير موجودة", "error");
+  const rem = c.qty - cutDistributed(cid, "machine");
+  if (qty > rem) return toast(`الباقي للمكن ${rem} فقط`, "error");
+  if (color) {
+    const col = (c.colors||[]).find(x => x.name===color);
+    if (col) {
+      const cd = cutColorDistributed(cid, color, "machine");
+      const cr = col.qty - cd;
+      if (qty > cr) return toast(`الباقي من اللون ${color} للمكن = ${cr} فقط`, "error");
     }
   }
-  const p = data.products.find(x => x.id===pid);
-  const price = p.price_machine;
+  const p = data.products.find(x => x.id===c.product_id);
+  const price = p ? p.price_machine : 0;
   const total = qty * price;
-  data.pieceWork.push({ id: data.nextId.work++, worker_id: wid, product_id: pid, qty, price, total, order_id: oid || null, cut_id: cid || null, color, pname: p.name, date: today() });
+  data.pieceWork.push({ id: data.nextId.work++, worker_id: wid, product_id: c.product_id, qty, price, total, cut_id: cid, color, date: today() });
   save(); renderAll();
   document.getElementById("workQtyMachine").value = "";
   toast(`تم تسجيل ${qty} = ${fmt(total)} ج للمكن ✅`);
 }
 
 // ============================================================
-// ============ Work Iron ============
+// ============ Work Iron (بدون طلب وصنف) ============
 // ============================================================
 function renderWorkIron(){
   const wSel = document.getElementById("workWorkerIron");
@@ -1574,16 +1202,6 @@ function renderWorkIron(){
   const workers = data.users.filter(u => u.role==="iron");
   wSel.innerHTML = `<option value="">— اختار —</option>` + workers.map(u => `<option value="${u.id}">${u.name}</option>`).join("");
   wSel.value = wv;
-  filterWorkProductsIron();
-  
-  const oSel = document.getElementById("workOrderIron");
-  const ov = oSel.value;
-  oSel.innerHTML = `<option value="">— بدون —</option>` + data.orders.filter(o => orderStatus(o)!=="done" && orderStatus(o)!=="cancelled").map(o => {
-    const s = data.suppliers.find(x => x.id===o.supplier_id);
-    const p = data.products.find(x => x.id===o.product_id);
-    return `<option value="${o.id}">${s?s.name:'?'} — ${p?p.name:'?'} (${orderRemaining(o)})</option>`;
-  }).join("");
-  oSel.value = ov;
   
   const cSel = document.getElementById("workCutIron");
   const cv = cSel.value;
@@ -1600,21 +1218,13 @@ function renderWorkIron(){
   const body = document.getElementById("workLogsIron");
   if (!logs.length) { body.innerHTML = emptyState("لا يوجد إنتاج مسجل للمكوة", "سجل أول إنتاج"); return; }
   body.innerHTML = `<div class="table-wrap"><table>
-    <tr><th>المكوة</th><th>الصنف</th><th>اللون</th><th>العدد</th><th>السعر</th><th>الإجمالي</th><th></th></tr>
+    <tr><th>المكوة</th><th>القصة</th><th>اللون</th><th>العدد</th><th>السعر</th><th>الإجمالي</th><th></th></tr>
     ${logs.map(l => {
       const u = data.users.find(x => x.id===l.worker_id);
-      const p = data.products.find(x => x.id===l.product_id);
-      return `<tr><td>${u?u.name:'?'}</td><td>${p?p.name:'?'}</td><td>${l.color||'-'}</td><td>${fmt(l.qty)}</td><td>${fmt(l.price)} ج</td><td><b>${fmt(l.total)} ج</b></td><td><button class="btn warning sm" onclick="editWork(${l.id})">✏️</button> <button class="btn danger sm" onclick="delWork(${l.id})">🗑️</button></td></tr>`;
+      const c = data.cuts.find(x => x.id===l.cut_id);
+      return `<tr><td>${u?u.name:'?'}</td><td>${c?c.name:'?'}</td><td>${l.color||'-'}</td><td>${fmt(l.qty)}</td><td>${fmt(l.price)} ج</td><td><b>${fmt(l.total)} ج</b></td><td><button class="btn warning sm" onclick="editWork(${l.id})">✏️</button> <button class="btn danger sm" onclick="delWork(${l.id})">🗑️</button></td></tr>`;
     }).join("")}
   </table></div>`;
-}
-function filterWorkProductsIron(){
-  const wid = Number(document.getElementById("workWorkerIron").value);
-  const sel = document.getElementById("workProductIron");
-  const u = data.users.find(x => x.id===wid);
-  if (!u) { sel.innerHTML = `<option value="">— اختار المكوة —</option>`; return; }
-  const prods = data.products.filter(p => p.price_iron > 0);
-  sel.innerHTML = `<option value="">— اختار —</option>` + prods.map(p => `<option value="${p.id}">${p.name} (${fmt(p.price_iron)} ج)</option>`).join("");
 }
 function updateCutRemainingIron(){
   const cid = Number(document.getElementById("workCutIron").value);
@@ -1639,44 +1249,35 @@ function updateWorkColorsIron(){
   colorSel.innerHTML = `<option value="">— بدون —</option>` + avail.map(x => `<option value="${x.name}">${x.name} (باقي: ${x.remaining})</option>`).join("");
 }
 function addWorkIron(){
-  if (!hasPermission("work_iron")) return toast("لا تملك صلاحية", "error");
   const wid = Number(document.getElementById("workWorkerIron").value);
-  const pid = Number(document.getElementById("workProductIron").value);
   const qty = Number(document.getElementById("workQtyIron").value);
-  const oid = Number(document.getElementById("workOrderIron").value) || 0;
   const cid = Number(document.getElementById("workCutIron").value) || 0;
   const color = document.getElementById("workColorIron").value || null;
   if (!wid) return toast("اختار المكوة", "error");
-  if (!pid) return toast("اختار الصنف", "error");
   if (!qty || qty <= 0) return toast("عدد غير صحيح", "error");
+  if (!cid) return toast("اختار القصة", "error");
   
-  if (cid) {
-    const c = data.cuts.find(x => x.id===cid);
-    const rem = c.qty - cutDistributed(cid, "iron");
-    if (qty > rem) return toast(`الباقي للمكوة ${rem} فقط`, "error");
-    if (color) {
-      const col = (c.colors||[]).find(x => x.name===color);
-      if (col) {
-        const cd = cutColorDistributed(cid, color, "iron");
-        const cr = col.qty - cd;
-        if (qty > cr) return toast(`الباقي من اللون ${color} للمكوة = ${cr} فقط`, "error");
-      }
+  const c = data.cuts.find(x => x.id===cid);
+  if (!c) return toast("القصة غير موجودة", "error");
+  const rem = c.qty - cutDistributed(cid, "iron");
+  if (qty > rem) return toast(`الباقي للمكوة ${rem} فقط`, "error");
+  if (color) {
+    const col = (c.colors||[]).find(x => x.name===color);
+    if (col) {
+      const cd = cutColorDistributed(cid, color, "iron");
+      const cr = col.qty - cd;
+      if (qty > cr) return toast(`الباقي من اللون ${color} للمكوة = ${cr} فقط`, "error");
     }
   }
-  const p = data.products.find(x => x.id===pid);
-  const price = p.price_iron;
+  const p = data.products.find(x => x.id===c.product_id);
+  const price = p ? p.price_iron : 0;
   const total = qty * price;
-  data.pieceWork.push({ id: data.nextId.work++, worker_id: wid, product_id: pid, qty, price, total, order_id: oid || null, cut_id: cid || null, color, pname: p.name, date: today() });
+  data.pieceWork.push({ id: data.nextId.work++, worker_id: wid, product_id: c.product_id, qty, price, total, cut_id: cid, color, date: today() });
   save(); renderAll();
   document.getElementById("workQtyIron").value = "";
   toast(`تم تسجيل ${qty} = ${fmt(total)} ج للمكوة ✅`);
 }
 function delWork(id){
-  const w = data.pieceWork.find(x => x.id===id);
-  if (!w) return;
-  const worker = data.users.find(u => u.id===w.worker_id);
-  const perm = worker && worker.role==="iron" ? "work_iron" : "work_machine";
-  if (!hasPermission(perm)) return toast("لا تملك صلاحية", "error");
   openModal("حذف عملية", "سيتم الحذف.", () => { data.pieceWork = data.pieceWork.filter(x => x.id!==id); save(); renderAll(); toast("تم الحذف"); });
 }
 
@@ -1733,7 +1334,7 @@ function renderAttendance(){
   }).join("");
 
   const weeklyPaid = data.weeklyPay.filter(wp => wp.worker_id===wid && wp.week_start===days[0].date).reduce((s,wp) => s+wp.amount, 0);
-  const advRem = remainingAdv(wid);
+  const advRem = totalAdv(wid);
   const net = totalEarn - advRem - weeklyPaid;
   const weeklyRate = getWeeklyRate(u);
 
@@ -1742,13 +1343,12 @@ function renderAttendance(){
     <div class="kpi red"><div class="kpi-label">❌ أيام الغياب</div><div class="kpi-value">${absentCount}</div></div>
     <div class="kpi blue"><div class="kpi-label">💰 مستحقات الأسبوع</div><div class="kpi-value">${fmt(totalEarn)} ج</div></div>
     <div class="kpi purple"><div class="kpi-label">📊 الأجر الأسبوعي الثابت</div><div class="kpi-value">${fmt(weeklyRate)} ج</div></div>
-    <div class="kpi orange"><div class="kpi-label">💸 مصاريف متبقية</div><div class="kpi-value">${fmt(advRem)} ج</div></div>
+    <div class="kpi orange"><div class="kpi-label">💸 مصاريف</div><div class="kpi-value">${fmt(advRem)} ج</div></div>
     <div class="kpi red"><div class="kpi-label">💵 مقبوض هذا الأسبوع</div><div class="kpi-value">${fmt(weeklyPaid)} ج</div></div>
     <div class="kpi ${net>=0?'green':'red'}"><div class="kpi-label">✅ صافي الأسبوع</div><div class="kpi-value ${net>=0?'pos':'neg'}">${fmt(net)} ج</div></div>
   </div>`;
 }
 function setAtt(wid, date, present){
-  if (!hasPermission("attendance")) return toast("لا تملك صلاحية", "error");
   const u = data.users.find(x => x.id===wid);
   const existing = getAttendance(wid, date);
   const dayRate = dailyRateOf({ weekly_rate: getWeeklyRate(u) });
@@ -1758,7 +1358,6 @@ function setAtt(wid, date, present){
   renderAttendance();
 }
 function setAttPay(wid, date, val){
-  if (!hasPermission("attendance")) return toast("لا تملك صلاحية", "error");
   const isFriday = new Date(date+"T00:00:00").getDay() === 5;
   if (!isFriday) return toast("تعديل الأجر متاح للجمعة فقط", "warning");
   const a = getAttendance(wid, date);
@@ -1796,7 +1395,6 @@ function renderWeeklyPay(){
   </table></div>`;
 }
 function addWeeklyPay(){
-  if (!hasPermission("weeklyPay")) return toast("لا تملك صلاحية", "error");
   const wid = Number(document.getElementById("wpWorker").value);
   const date = document.getElementById("wpDate").value || today();
   const amt = Number(document.getElementById("wpAmount").value);
@@ -1812,7 +1410,6 @@ function addWeeklyPay(){
   toast(`تم تسجيل قبض ${fmt(amt)} ج ✅`);
 }
 function delWeeklyPay(id){
-  if (!hasPermission("weeklyPay")) return toast("لا تملك صلاحية", "error");
   openModal("حذف قبض", "سيتم الحذف.", () => { data.weeklyPay = data.weeklyPay.filter(x => x.id!==id); save(); renderAll(); toast("تم الحذف"); });
 }
 
@@ -1835,7 +1432,6 @@ function renderSuppliers(){
   </table></div>`;
 }
 function addSupplier(){
-  if (!hasPermission("suppliers")) return toast("لا تملك صلاحية", "error");
   const name = document.getElementById("supName").value.trim();
   const phone = document.getElementById("supPhone").value.trim();
   const note = document.getElementById("supNote").value.trim();
@@ -1848,7 +1444,6 @@ function addSupplier(){
   toast(`تم إضافة ${name} ✅`);
 }
 function delSupplier(id){
-  if (!hasPermission("suppliers")) return toast("لا تملك صلاحية", "error");
   const s = data.suppliers.find(x => x.id===id);
   openModal("حذف مستورد", `حذف "${s.name}"؟`, () => {
     data.suppliers = data.suppliers.filter(x => x.id!==id);
@@ -1900,7 +1495,6 @@ function renderSupPay(){
   </table></div>`;
 }
 function addSupplierPayment(){
-  if (!hasPermission("supPay")) return toast("لا تملك صلاحية", "error");
   const sid = Number(document.getElementById("supPayWorker").value);
   const amt = Number(document.getElementById("supPayAmount").value);
   const note = document.getElementById("supPayNote").value;
@@ -1913,12 +1507,11 @@ function addSupplierPayment(){
   toast(`تم تسجيل ${fmt(amt)} ج ✅`);
 }
 function delSupPay(id){
-  if (!hasPermission("supPay")) return toast("لا تملك صلاحية", "error");
   openModal("حذف دفعة", "سيتم الحذف.", () => { data.supPayments = data.supPayments.filter(x => x.id!==id); save(); renderAll(); toast("تم الحذف"); });
 }
 
 // ============================================================
-// ============ Finance (المصاريف والخصومات) ============
+// ============ Finance ============
 // ============================================================
 function fillSelects(){
   const advWorkerSel = document.getElementById("advWorker");
@@ -1945,80 +1538,50 @@ function fillSelects(){
   }
 }
 
-function updateExpTypeUI(){
-  const type = document.getElementById("expType").value;
-  const note = document.getElementById("advNote");
-  if (note) {
-    note.placeholder = type === "advance" ? "سبب السلفة (اختياري)" : "سبب الاسترداد (اختياري)";
-  }
-}
-
-function addExpenseOrRefund(){
-  if (!hasPermission("advance")) return toast("لا تملك صلاحية", "error");
-  const type = document.getElementById("expType").value;
-  const wid = Number(document.getElementById("advWorker").value);
-  const amt = Number(document.getElementById("advAmount").value);
-  const note = document.getElementById("advNote").value;
-  
-  if (!wid) return toast("اختار العضو", "error");
-  if (!amt || amt <= 0) return toast("مبلغ غير صحيح", "error");
-  
-  if (type === "advance") {
-    data.advances.push({ id: data.nextId.adv++, worker_id: wid, amount: amt, note, date: today() });
-    toast(`تم تسجيل سلفة ${fmt(amt)} ج ✅`);
-  } else {
-    data.refunds.push({ id: data.nextId.ref++, worker_id: wid, amount: amt, note, date: today() });
-    toast(`تم تسجيل استرداد ${fmt(amt)} ج ✅`);
-  }
-  
-  save(); renderAll();
-  document.getElementById("advAmount").value = "";
-  document.getElementById("advNote").value = "";
-}
-
 function renderAdvances(){
   fillSelects();
   
-  const allExpenses = [
-    ...data.advances.map(a => ({ ...a, _type: "advance", _typeLabel: "💸 سلفة", _typeColor: "neg" })),
-    ...data.refunds.map(r => ({ ...r, _type: "refund", _typeLabel: "💵 استرداد", _typeColor: "pos" }))
-  ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 50);
+  const logs = data.advances.slice().reverse().slice(0,50);
   
   const body = document.getElementById("advLogs");
   if (!body) return;
-  if (!allExpenses.length) { 
-    body.innerHTML = emptyState("لا يوجد مصاريف أو خصومات", "سجل أول مصروف أو خصم"); 
+  if (!logs.length) { 
+    body.innerHTML = emptyState("لا يوجد مصاريف", "سجل أول مصروف"); 
     return; 
   }
   
   body.innerHTML = `<div class="table-wrap"><table>
-    <tr><th>النوع</th><th>العضو</th><th>المبلغ</th><th>ملاحظة</th><th>التاريخ</th><th></th></tr>
-    ${allExpenses.map(l => {
+    <tr><th>العضو</th><th>المبلغ</th><th>ملاحظة</th><th>التاريخ</th><th></th></tr>
+    ${logs.map(l => {
       const u = data.users.find(x => x.id === l.worker_id);
-      const deleteFn = l._type === "advance" ? `delAdv(${l.id})` : `delRef(${l.id})`;
-      const editFn = l._type === "advance" ? `editAdvance(${l.id})` : `editRefund(${l.id})`;
       return `<tr>
-        <td><span class="badge ${l._type === 'advance' ? 'pending' : 'done'}">${l._typeLabel}</span></td>
         <td>${u?u.name:'?'}</td>
-        <td><b class="${l._typeColor}">${fmt(l.amount)} ج</b></td>
+        <td><b class="neg">${fmt(l.amount)} ج</b></td>
         <td>${l.note||"-"}</td>
         <td>${l.date}</td>
         <td>
-          <button class="btn warning sm" onclick="${editFn}">✏️</button>
-          <button class="btn danger sm" onclick="${deleteFn}">🗑️</button>
+          <button class="btn warning sm" onclick="editAdvance(${l.id})">✏️</button>
+          <button class="btn danger sm" onclick="delAdv(${l.id})">🗑️</button>
         </td>
       </tr>`;
     }).join("")}
   </table></div>`;
 }
 
-function delAdv(id){
-  if (!hasPermission("advance")) return toast("لا تملك صلاحية", "error");
-  openModal("حذف سلفة", "سيتم الحذف.", () => { data.advances = data.advances.filter(x => x.id!==id); save(); renderAll(); toast("تم الحذف"); });
+function addAdvance(){
+  const wid = Number(document.getElementById("advWorker").value);
+  const amt = Number(document.getElementById("advAmount").value);
+  const note = document.getElementById("advNote").value;
+  if (!wid) return toast("اختار العضو", "error");
+  if (!amt || amt <= 0) return toast("مبلغ غير صحيح", "error");
+  data.advances.push({ id: data.nextId.adv++, worker_id: wid, amount: amt, note, date: today() });
+  save(); renderAll();
+  document.getElementById("advAmount").value = "";
+  document.getElementById("advNote").value = "";
+  toast(`تم تسجيل مصروف ${fmt(amt)} ج ✅`);
 }
-function delRef(id){
-  if (!hasPermission("advance")) return toast("لا تملك صلاحية", "error");
-  openModal("حذف استرداد", "سيتم الحذف.", () => { data.refunds = data.refunds.filter(x => x.id!==id); save(); renderAll(); toast("تم الحذف"); });
+function delAdv(id){
+  openModal("حذف مصروف", "سيتم الحذف.", () => { data.advances = data.advances.filter(x => x.id!==id); save(); renderAll(); toast("تم الحذف"); });
 }
 
 function renderPayments(){
@@ -2032,7 +1595,6 @@ function renderPayments(){
   </table></div>`;
 }
 function addPayment(){
-  if (!hasPermission("pay")) return toast("لا تملك صلاحية", "error");
   const wid = Number(document.getElementById("payWorker").value);
   const amt = Number(document.getElementById("payAmount").value);
   const note = document.getElementById("payNote").value;
@@ -2045,7 +1607,6 @@ function addPayment(){
   toast(`تم صرف ${fmt(amt)} ج ✅`);
 }
 function delPay(id){
-  if (!hasPermission("pay")) return toast("لا تملك صلاحية", "error");
   openModal("حذف صرف", "سيتم الحذف.", () => { data.payments = data.payments.filter(x => x.id!==id); save(); renderAll(); toast("تم الحذف"); });
 }
 
@@ -2075,22 +1636,22 @@ function renderWorkerReport(){
     const works = data.pieceWork.filter(w => w.worker_id===wid && inRange(w.date));
     const totalP = works.reduce((s,w) => s+w.qty, 0);
     const totalV = works.reduce((s,w) => s+w.total, 0);
-    const advRem = remainingAdv(wid);
+    const advTotal = totalAdv(wid);
     const paid = totalPaid(wid);
-    const net = totalV - advRem - paid;
+    const net = totalV - advTotal - paid;
     html += `<div class="kpis">
       <div class="kpi green"><div class="kpi-label">📦 عدد القطع</div><div class="kpi-value">${fmt(totalP)}</div></div>
       <div class="kpi purple"><div class="kpi-label">💰 إجمالي الإنتاج</div><div class="kpi-value">${fmt(totalV)} ج</div></div>
-      <div class="kpi orange"><div class="kpi-label">💸 مصاريف متبقية</div><div class="kpi-value">${fmt(advRem)} ج</div></div>
+      <div class="kpi orange"><div class="kpi-label">💸 مصاريف</div><div class="kpi-value">${fmt(advTotal)} ج</div></div>
       <div class="kpi red"><div class="kpi-label">💵 مصروف</div><div class="kpi-value">${fmt(paid)} ج</div></div>
       <div class="kpi ${net>=0?'green':'red'}"><div class="kpi-label">✅ الصافي</div><div class="kpi-value ${net>=0?'pos':'neg'}">${fmt(net)} ج</div></div>
     </div>`;
     html += `<div class="card"><div class="card-header"><div class="card-title">✂️ سجل الإنتاج (${works.length})</div></div>
       <div class="table-wrap"><table>
-      <tr><th>التاريخ</th><th>الصنف</th><th>اللون</th><th>العدد</th><th>السعر</th><th>الإجمالي</th></tr>
+      <tr><th>التاريخ</th><th>القصة</th><th>اللون</th><th>العدد</th><th>السعر</th><th>الإجمالي</th></tr>
       ${works.slice().sort((a,b) => new Date(b.date)-new Date(a.date)).map(w => {
-        const p = data.products.find(x => x.id===w.product_id);
-        return `<tr><td>${w.date}</td><td>${p?p.name:'?'}</td><td>${w.color||'-'}</td><td>${fmt(w.qty)}</td><td>${fmt(w.price)} ج</td><td>${fmt(w.total)} ج</td></tr>`;
+        const c = data.cuts.find(x => x.id===w.cut_id);
+        return `<tr><td>${w.date}</td><td>${c?c.name:'?'}</td><td>${w.color||'-'}</td><td>${fmt(w.qty)}</td><td>${fmt(w.price)} ج</td><td>${fmt(w.total)} ج</td></tr>`;
       }).join("")}
       </table></div>
     </div>`;
@@ -2099,12 +1660,12 @@ function renderWorkerReport(){
     const present = att.filter(a => a.present).length;
     const totalEarn = att.filter(a => a.present).reduce((s,a) => s + (Number(a.pay)||0), 0);
     const weeklyPaid = data.weeklyPay.filter(wp => wp.worker_id===wid && inRange(wp.date)).reduce((s,wp) => s+wp.amount, 0);
-    const advRem = remainingAdv(wid);
-    const net = totalEarn - advRem - weeklyPaid;
+    const advTotal = totalAdv(wid);
+    const net = totalEarn - advTotal - weeklyPaid;
     html += `<div class="kpis">
       <div class="kpi green"><div class="kpi-label">📅 أيام الحضور</div><div class="kpi-value">${present}</div></div>
       <div class="kpi purple"><div class="kpi-label">💰 إجمالي المستحقات</div><div class="kpi-value">${fmt(totalEarn)} ج</div></div>
-      <div class="kpi orange"><div class="kpi-label">💸 مصاريف متبقية</div><div class="kpi-value">${fmt(advRem)} ج</div></div>
+      <div class="kpi orange"><div class="kpi-label">💸 مصاريف</div><div class="kpi-value">${fmt(advTotal)} ج</div></div>
       <div class="kpi red"><div class="kpi-label">💵 قبض أسبوعي</div><div class="kpi-value">${fmt(weeklyPaid)} ج</div></div>
       <div class="kpi ${net>=0?'green':'red'}"><div class="kpi-label">✅ الصافي</div><div class="kpi-value ${net>=0?'pos':'neg'}">${fmt(net)} ج</div></div>
     </div>`;
@@ -2156,14 +1717,12 @@ function modalConfirm(){
 // ============ Backup ============
 // ============================================================
 function backupData(){
-  if (!hasPermission("backup")) return toast("لا تملك صلاحية", "error");
   const blob = new Blob([JSON.stringify(data,null,2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = `workshop_backup_${today()}.json`; a.click();
   toast("تم التحميل ✅");
 }
 function restoreData(e){
-  if (!hasPermission("backup")) return toast("لا تملك صلاحية", "error");
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
@@ -2177,9 +1736,8 @@ function restoreData(e){
   reader.readAsText(file);
 }
 function wipeAll(){
-  if (!hasPermission("backup")) return toast("لا تملك صلاحية", "error");
   openModal("حذف كل البيانات", "⚠️ لا يمكن التراجع!", () => {
-    data = { users: [], products: [], orders: [], suppliers: [], cuts: [], pieceWork: [], advances: [], refunds: [], payments: [], supPayments: [], attendance: [], weeklyPay: [], nextId: { user:1, prod:1, ord:1, sup:1, cut:1, work:1, adv:1, ref:1, pay:1, spay:1, wp:1 } };
+    data = { users: [], products: [], orders: [], suppliers: [], cuts: [], pieceWork: [], advances: [], payments: [], supPayments: [], attendance: [], weeklyPay: [], nextId: { user:1, prod:1, ord:1, sup:1, cut:1, work:1, adv:1, pay:1, spay:1, wp:1 } };
     save(); renderAll(); toast("تم الحذف");
   });
 }
@@ -2196,12 +1754,6 @@ function emptyState(title, sub){
 }
 
 function go(page, ev){
-  const section = page.replace(/-/g, "_");
-  if (section !== "settings" && !hasPermission(section)) {
-    toast("لا تملك صلاحية للوصول لهذا القسم", "error");
-    return;
-  }
-  
   document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
   document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
   const target = document.getElementById("page-"+page);
@@ -2230,16 +1782,46 @@ function renderAll(){
   renderAdvances();
   renderPayments();
   renderWorkerReport();
-  renderUsers();
-  renderDevices();
   renderMyAccount();
+}
+
+function renderMyAccount(){
+  const u = currentUser();
+  const body = document.getElementById("myAccountInfo");
+  if (!u || !body) return;
+  body.innerHTML = `
+    <div style="padding:14px;background:var(--bg);border-radius:12px;margin-bottom:10px">
+      <div style="margin-bottom:6px"><b>اسم المستخدم:</b> <code style="background:var(--card);padding:2px 8px;border-radius:4px">${u.username}</code></div>
+      <div style="margin-bottom:6px"><b>الاسم الكامل:</b> ${u.fullName}</div>
+      <div><b>النوع:</b> 👑 مدير</div>
+    </div>
+  `;
+}
+
+function changeMyPassword(){
+  const cur = document.getElementById("curPw").value;
+  const nw = document.getElementById("newPw").value;
+  const conf = document.getElementById("newPwConfirm").value;
+  
+  const users = loadUsers();
+  const admin = users[0];
+  
+  if (cur !== admin.password) return toast("كلمة السر الحالية غير صحيحة", "error");
+  if (!nw || nw.length < 4) return toast("كلمة السر الجديدة قصيرة", "error");
+  if (nw !== conf) return toast("تأكيد كلمة السر غير مطابق", "error");
+  
+  admin.password = nw;
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  document.getElementById("curPw").value = "";
+  document.getElementById("newPw").value = "";
+  document.getElementById("newPwConfirm").value = "";
+  toast("تم تغيير كلمة السر ✅");
 }
 
 // ============================================================
 // ============ Boot ============
 // ============================================================
 window.addEventListener("DOMContentLoaded", () => {
-  // شاشة التحميل 3 ثواني
   const totalDuration = 3000;
   const bar = document.getElementById("loaderProgressBar");
   const loader = document.getElementById("loader");
@@ -2261,7 +1843,6 @@ window.addEventListener("DOMContentLoaded", () => {
   }
   updateProgress();
   
-  // التهيئة
   load();
   data.users.forEach(u => {
     if ((u.role==="floor"||u.role==="overlock") && u.daily_rate && !u.weekly_rate) {
@@ -2270,19 +1851,14 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
   
-  // استعادة الجلسة
-  const id = Number(sessionStorage.getItem(CURRENT_USER_KEY));
+  const id = sessionStorage.getItem(CURRENT_USER_KEY);
   if (id) {
-    const u = loadUsers().find(x => x.id === id);
-    if (u && u.active !== false) {
-      setTimeout(() => {
-        document.getElementById("login").style.display = "none";
-        document.getElementById("app").style.display = "block";
-        applyPermissions();
-        renderAll();
-        updateUserBadge();
-      }, totalDuration + 100);
-    }
+    setTimeout(() => {
+      document.getElementById("login").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      renderAll();
+      updateUserBadge();
+    }, totalDuration + 100);
   } else {
     setTimeout(() => {
       const lu = document.getElementById("loginUsername");
